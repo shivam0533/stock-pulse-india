@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #232B47;
+    border-radius: 5px;
+    border: 2px solid #0A0E1A;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #2D3556;
+  }
+
+  /* Focus visibility */
+  *:focus-visible {
+    outline: 2px solid #FFB627;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Remove autofill blue tint */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px #131829 inset !important;
+    -webkit-text-fill-color: #E8ECF7 !important;
+    caret-color: #E8ECF7 !important;
+  }
+
+  /* Number tabular alignment */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .surface-card {
+    @apply bg-ink-700/60 backdrop-blur-sm border border-ink-600/60 rounded-2xl;
+  }
+
+  .surface-card-hover {
+    @apply hover:border-ink-500/80 hover:bg-ink-700/80 transition-colors;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.04) 0%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0.04) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  /* Subtle grid background overlay */
+  .bg-grid {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+}
+
+@layer utilities {
+  .gradient-mask-b {
+    mask-image: linear-gradient(to bottom, black, transparent);
+  }
+
+  .text-gradient-amber {
+    background: linear-gradient(135deg, #FFB627 0%, #FFC54E 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
