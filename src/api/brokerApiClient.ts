@@ -6,11 +6,16 @@ import { useBrokerToastStore } from '@store/brokerToast.store';
  * Dedicated HTTP client for the real broker-integration backend (backend/).
  * Deliberately does NOT reuse the shared `apiClient` / VITE_API_BASE_URL —
  * that env var points at the rest of this app's external mock-data domain.
- * This client always targets the local /api path, which the Vite dev
- * server proxies to the broker backend (see vite.config.ts).
+ *
+ * Base URL resolution: if VITE_API_URL is set (the deployed backend's real
+ * origin, e.g. Railway), requests go straight there. Left unset, it falls
+ * back to the relative /api path, which the Vite dev/preview server proxies
+ * to a local backend (see vite.config.ts) — unchanged local-dev behavior.
  */
+const API_ORIGIN = import.meta.env.VITE_API_URL ?? '';
+
 export const brokerApiClient = axios.create({
-  baseURL: '/api',
+  baseURL: `${API_ORIGIN}/api`,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',

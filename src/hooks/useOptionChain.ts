@@ -12,6 +12,11 @@ import { optionsService, mapNiftyChainResponse, type NiftyChainResponse } from '
  */
 const activeStreams = new Map<number, { source: EventSource; refCount: number; closeTimer: ReturnType<typeof setTimeout> | null }>();
 
+// EventSource has no baseURL concept (unlike brokerApiClient's axios
+// instance) — mirrors the same VITE_API_URL resolution so the live stream
+// keeps working once the backend is on a different origin (e.g. Railway).
+const API_ORIGIN = import.meta.env.VITE_API_URL ?? '';
+
 function subscribeToLiveChain(expiryIndex: number, queryClient: QueryClient): () => void {
   let entry = activeStreams.get(expiryIndex);
 
@@ -24,7 +29,7 @@ function subscribeToLiveChain(expiryIndex: number, queryClient: QueryClient): ()
   }
 
   if (!entry) {
-    const source = new EventSource(`/api/nifty/option-chain/stream?expiryIndex=${expiryIndex}`);
+    const source = new EventSource(`${API_ORIGIN}/api/nifty/option-chain/stream?expiryIndex=${expiryIndex}`);
     source.onmessage = (event) => {
       try {
         const chain = JSON.parse(event.data) as NiftyChainResponse;
