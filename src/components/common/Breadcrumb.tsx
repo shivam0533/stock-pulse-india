@@ -10,16 +10,10 @@ interface Crumb {
 }
 
 const ROUTE_LABELS: Record<string, string> = {
-  [ROUTES.MARKETS]: 'Markets',
-  [ROUTES.PORTFOLIO]: 'Portfolio',
-  [ROUTES.WATCHLIST]: 'Watchlist',
-  [ROUTES.NEWS]: 'News',
   [ROUTES.PROFILE]: 'Profile',
   [ROUTES.OPTION_CHAIN]: 'NIFTY Option Chain',
-  [ROUTES.SIGNALS]: 'AI Trading Signals',
-  [ROUTES.ALGO]: 'Algo Console',
-  [ROUTES.ANALYTICS]: 'Performance Analytics',
   [ROUTES.TRADE_HISTORY]: 'Trade History',
+  [ROUTES.PERFORMANCE]: 'Performance',
   [ROUTES.SETTINGS]: 'Settings',
 };
 
@@ -30,10 +24,7 @@ function useBreadcrumbs(): Crumb[] {
   if (pathname === ROUTES.DASHBOARD) return [];
 
   if (symbol && pathname.startsWith('/stock/')) {
-    return [
-      { label: 'Markets', path: ROUTES.MARKETS },
-      { label: symbol.toUpperCase() },
-    ];
+    return [{ label: symbol.toUpperCase() }];
   }
 
   const label = ROUTE_LABELS[pathname];

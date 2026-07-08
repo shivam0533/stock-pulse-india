@@ -25,6 +25,7 @@
       "@services/*": ["src/services/*"],
       "@api/*": ["src/api/*"],
       "@store/*": ["src/store/*"],
+      "@config/*": ["src/config/*"],
       "@types/*": ["src/types/*"],
       "@utils/*": ["src/utils/*"],
       "@assets/*": ["src/assets/*"],

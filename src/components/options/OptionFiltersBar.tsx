@@ -21,9 +21,6 @@ interface OptionFiltersBarProps {
   expiries: OptionExpiry[];
   filters: OptionChainFilter;
   onChange: (patch: Partial<OptionChainFilter>) => void;
-  refreshCountdown: number;
-  autoRefresh: boolean;
-  onToggleAutoRefresh: () => void;
   onManualRefresh: () => void;
   isRefreshing: boolean;
 }
@@ -32,9 +29,6 @@ export function OptionFiltersBar({
   expiries,
   filters,
   onChange,
-  refreshCountdown,
-  autoRefresh,
-  onToggleAutoRefresh,
   onManualRefresh,
   isRefreshing,
 }: OptionFiltersBarProps) {
@@ -56,7 +50,7 @@ export function OptionFiltersBar({
           >
             <span className="font-semibold">{exp.label}</span>
             <span className={cn('text-2xs mt-0.5', filters.expiryIndex === i ? 'text-brand-400' : 'text-ink-300')}>
-              {exp.dte}D · {exp.type === 'weekly' ? 'W' : 'M'}
+              {exp.type === 'weekly' ? 'W' : 'M'}
             </span>
           </button>
         ))}
@@ -126,7 +120,7 @@ export function OptionFiltersBar({
           </button>
         </div>
 
-        {/* Auto Refresh */}
+        {/* Live status + manual refresh */}
         <div className="flex items-center gap-2 border-l border-ink-600/60 pl-2">
           <button
             type="button"
@@ -139,19 +133,10 @@ export function OptionFiltersBar({
           >
             <RefreshCw size={16} />
           </button>
-          <button
-            type="button"
-            onClick={onToggleAutoRefresh}
-            className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors',
-              autoRefresh
-                ? 'bg-gain-subtle text-gain border-gain-border'
-                : 'bg-ink-800 text-ink-300 border-ink-600 hover:border-ink-500',
-            )}
-          >
-            <span className={cn('h-1.5 w-1.5 rounded-full', autoRefresh ? 'bg-gain animate-pulse' : 'bg-ink-400')} />
-            {autoRefresh ? `${refreshCountdown}s` : 'Auto Refresh'}
-          </button>
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border bg-gain-subtle text-gain border-gain-border">
+            <span className="h-1.5 w-1.5 rounded-full bg-gain animate-pulse" />
+            LIVE
+          </span>
         </div>
       </div>
     </div>

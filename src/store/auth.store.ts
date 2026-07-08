@@ -64,14 +64,15 @@ export const useAuthStore = create<AuthState>()(
         try {
           const response = await authService.signup(credentials);
           storage.set(STORAGE_KEYS.AUTH_TOKEN, response.token);
-          storage.set(STORAGE_KEYS.REFRESH_TOKEN, response.refreshToken);
-          set({
-            user: response.user,
-            token: response.token,
-            tokenExpiresAt: Date.now() + response.expiresIn * 1000,
-            status: 'authenticated',
-            error: null,
-          });
+storage.set(STORAGE_KEYS.REFRESH_TOKEN, response.refreshToken);
+
+set({
+  user: response.user,
+  token: response.token,
+  tokenExpiresAt: Date.now() + response.expiresIn * 1000,
+  status: 'authenticated',
+  error: null,
+});
         } catch (err) {
           const message = (err as { message?: string }).message ?? 'Signup failed';
           set({ status: 'unauthenticated', error: message });

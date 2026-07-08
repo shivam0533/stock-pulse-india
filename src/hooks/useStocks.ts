@@ -3,15 +3,6 @@ import { stocksService } from '@services/stocks.service';
 import { QUERY_KEYS } from '@utils/constants';
 import type { Timeframe } from '@/types';
 
-export function useStocks() {
-  return useQuery({
-    queryKey: QUERY_KEYS.STOCKS,
-    queryFn: () => stocksService.list(),
-    staleTime: 30 * 1000, // 30s — market data
-    refetchInterval: 60 * 1000, // poll every minute
-  });
-}
-
 export function useStock(symbol: string | undefined) {
   return useQuery({
     queryKey: QUERY_KEYS.STOCK(symbol ?? ''),
@@ -31,19 +22,3 @@ export function useStockHistory(symbol: string | undefined, timeframe: Timeframe
   });
 }
 
-export function useIndices() {
-  return useQuery({
-    queryKey: QUERY_KEYS.INDICES,
-    queryFn: () => stocksService.getIndices(),
-    staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
-  });
-}
-
-export function useTopMovers() {
-  return useQuery({
-    queryKey: QUERY_KEYS.TOP_MOVERS,
-    queryFn: () => stocksService.getTopMovers(),
-    staleTime: 60 * 1000,
-  });
-}

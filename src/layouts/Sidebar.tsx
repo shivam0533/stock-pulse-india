@@ -1,17 +1,14 @@
-import { NavLink } from 'react-router-dom';
+import { useEffect } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   LayoutDashboard,
-  LineChart,
-  Briefcase,
-  Star,
-  Newspaper,
   User,
   BarChart2,
-  Zap,
-  Bot,
-  BarChart3,
+  Layers,
   ClipboardList,
+  BarChart3,
+  Plug,
   Settings,
   PanelLeftClose,
   PanelLeft,
@@ -26,24 +23,31 @@ import type { NavItem } from '@/types';
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', path: ROUTES.DASHBOARD, icon: LayoutDashboard },
-  { label: 'Markets', path: ROUTES.MARKETS, icon: LineChart },
   { label: 'Option Chain', path: ROUTES.OPTION_CHAIN, icon: BarChart2 },
-  { label: 'AI Signals', path: ROUTES.SIGNALS, icon: Zap },
-  { label: 'Algo Console', path: ROUTES.ALGO, icon: Bot },
-  { label: 'Analytics', path: ROUTES.ANALYTICS, icon: BarChart3 },
+  { label: 'Positions', path: ROUTES.POSITIONS, icon: Layers },
   { label: 'Trade History', path: ROUTES.TRADE_HISTORY, icon: ClipboardList },
-  { label: 'Portfolio', path: ROUTES.PORTFOLIO, icon: Briefcase },
-  { label: 'Watchlist', path: ROUTES.WATCHLIST, icon: Star },
-  { label: 'News', path: ROUTES.NEWS, icon: Newspaper },
-  { label: 'Profile', path: ROUTES.PROFILE, icon: User },
+  { label: 'Performance', path: ROUTES.PERFORMANCE, icon: BarChart3 },
   { label: 'Settings', path: ROUTES.SETTINGS, icon: Settings },
+  { label: 'Broker Integration', path: ROUTES.BROKER_INTEGRATION, icon: Plug },
+  { label: 'Profile', path: ROUTES.PROFILE, icon: User },
 ];
 
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, mobileSidebarOpen, closeMobileSidebar } = useUIStore();
   const isMobile = useIsMobile();
+  const location = useLocation();
 
   const collapsed = !isMobile && sidebarCollapsed;
+
+  // Belt-and-suspenders: close the mobile drawer the instant the route
+  // actually changes, independent of whether the NavLink's own onClick fired
+  // (some mobile WebKit browsers are known to drop touch/click events on
+  // elements layered over a backdrop-blur overlay). This guarantees the
+  // drawer never stays open after a real navigation, regardless of cause.
+  useEffect(() => {
+    if (mobileSidebarOpen) closeMobileSidebar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   return (
     <>
@@ -71,7 +75,11 @@ export function Sidebar() {
         className={cn(
           'fixed lg:sticky top-0 left-0 h-screen z-50 lg:z-30',
           'bg-ink-900/95 backdrop-blur-md border-r border-ink-600/60',
-          'flex flex-col shrink-0'
+          'flex flex-col shrink-0',
+          // Off-screen on mobile when closed — explicitly non-interactive so
+          // it can never intercept touches near the left edge, even though
+          // the transform should already move it out of the viewport.
+          isMobile && !mobileSidebarOpen && 'pointer-events-none lg:pointer-events-auto'
         )}
       >
         {/* Logo header */}

@@ -12,18 +12,15 @@ const Signup = lazy(() => import('@pages/Signup'));
 const ForgotPassword = lazy(() => import('@pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('@pages/ResetPassword'));
 const Dashboard = lazy(() => import('@pages/Dashboard'));
-const Markets = lazy(() => import('@pages/Markets'));
 const StockDetail = lazy(() => import('@pages/StockDetail'));
-const Portfolio = lazy(() => import('@pages/Portfolio'));
-const Watchlist = lazy(() => import('@pages/Watchlist'));
-const News = lazy(() => import('@pages/News'));
 const Profile = lazy(() => import('@pages/Profile'));
 const OptionChain = lazy(() => import('@pages/OptionChain'));
-const AISignals = lazy(() => import('@pages/AISignals'));
-const AlgoConsole = lazy(() => import('@pages/AlgoConsole'));
-const PerformanceAnalytics = lazy(() => import('@pages/PerformanceAnalytics'));
+const Positions = lazy(() => import('@pages/Positions'));
 const TradeHistory = lazy(() => import('@pages/TradeHistory'));
+const Performance = lazy(() => import('@pages/Performance'));
 const Settings = lazy(() => import('@pages/Settings'));
+const BrokerIntegration = lazy(() => import('@pages/BrokerIntegration'));
+const KotakNeoIntegration = lazy(() => import('@pages/KotakNeoIntegration'));
 const NotFound = lazy(() => import('@pages/NotFound'));
 
 export function AppRouter() {
@@ -54,18 +51,15 @@ export function AppRouter() {
             }
           >
             <Route path={ROUTES.DASHBOARD} element={<Dashboard />} />
-            <Route path={ROUTES.MARKETS} element={<Markets />} />
             <Route path={ROUTES.STOCK_DETAIL} element={<StockDetail />} />
-            <Route path={ROUTES.PORTFOLIO} element={<Portfolio />} />
-            <Route path={ROUTES.WATCHLIST} element={<Watchlist />} />
-            <Route path={ROUTES.NEWS} element={<News />} />
             <Route path={ROUTES.PROFILE} element={<Profile />} />
             <Route path={ROUTES.OPTION_CHAIN} element={<OptionChain />} />
-            <Route path={ROUTES.SIGNALS} element={<AISignals />} />
-            <Route path={ROUTES.ALGO} element={<AlgoConsole />} />
-            <Route path={ROUTES.ANALYTICS} element={<PerformanceAnalytics />} />
+            <Route path={ROUTES.POSITIONS} element={<Positions />} />
             <Route path={ROUTES.TRADE_HISTORY} element={<TradeHistory />} />
+            <Route path={ROUTES.PERFORMANCE} element={<Performance />} />
             <Route path={ROUTES.SETTINGS} element={<Settings />} />
+            <Route path={ROUTES.BROKER_INTEGRATION} element={<BrokerIntegration />} />
+            <Route path={ROUTES.KOTAK_NEO_INTEGRATION} element={<KotakNeoIntegration />} />
           </Route>
 
           {/* Fallbacks */}

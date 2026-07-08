@@ -75,16 +75,83 @@ const STRIKE_STEP = 50;
 const MIN_STRIKE = 23_000;
 const MAX_STRIKE = 26_000;
 
-export const OPTION_EXPIRIES: OptionExpiry[] = [
-  { label: '03 Jul 2026', date: new Date('2026-07-03').getTime(), dte: 3, type: 'weekly' },
-  { label: '10 Jul 2026', date: new Date('2026-07-10').getTime(), dte: 10, type: 'weekly' },
-  { label: '31 Jul 2026', date: new Date('2026-07-31').getTime(), dte: 31, type: 'monthly' },
-  { label: '27 Aug 2026', date: new Date('2026-08-27').getTime(), dte: 58, type: 'monthly' },
-  { label: '25 Sep 2026', date: new Date('2026-09-25').getTime(), dte: 87, type: 'monthly' },
-];
+const DAY_MS = 24 * 60 * 60 * 1000;
+const THURSDAY = 4;
+
+function daysBetween(a: Date, b: Date): number {
+  const utcA = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+  const utcB = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.round((utcB - utcA) / DAY_MS);
+}
+
+function nextThursdayOnOrAfter(date: Date): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + ((THURSDAY - d.getDay() + 7) % 7));
+  return d;
+}
+
+function lastThursdayOfMonth(year: number, monthIndex: number): Date {
+  const d = new Date(year, monthIndex + 1, 0); // last calendar day of the month
+  d.setDate(d.getDate() - ((d.getDay() - THURSDAY + 7) % 7));
+  return d;
+}
+
+function formatExpiryLabel(d: Date): string {
+  return new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).format(d);
+}
+
+// IST is a fixed UTC+5:30 offset (no DST). Date.now() is an absolute,
+// timezone-independent epoch, so shifting it once and reading the UTC
+// calendar fields yields today's IST calendar date. Building a fresh local
+// Date from those Y/M/D numbers means every downstream helper below
+// (nextThursdayOnOrAfter, lastThursdayOfMonth, daysBetween — all of which
+// use local Date getters/setters) operates on the correct IST calendar day
+// regardless of the host/browser's own timezone.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+function getISTToday(): Date {
+  const istShifted = new Date(Date.now() + IST_OFFSET_MS);
+  return new Date(istShifted.getUTCFullYear(), istShifted.getUTCMonth(), istShifted.getUTCDate());
+}
+
+/** Builds the next 2 weekly + 3 monthly NIFTY expiries relative to `today`, so the list is never stale. */
+function buildOptionExpiries(today: Date): OptionExpiry[] {
+  const weekly1 = nextThursdayOnOrAfter(today);
+  const weekly2 = new Date(weekly1);
+  weekly2.setDate(weekly2.getDate() + 7);
+
+  let monthly1 = lastThursdayOfMonth(today.getFullYear(), today.getMonth());
+  if (monthly1 < today) monthly1 = lastThursdayOfMonth(today.getFullYear(), today.getMonth() + 1);
+  const monthly2 = lastThursdayOfMonth(monthly1.getFullYear(), monthly1.getMonth() + 1);
+  const monthly3 = lastThursdayOfMonth(monthly1.getFullYear(), monthly1.getMonth() + 2);
+
+  const dates: [Date, OptionExpiry['type']][] = [
+    [weekly1, 'weekly'],
+    [weekly2, 'weekly'],
+    [monthly1, 'monthly'],
+    [monthly2, 'monthly'],
+    [monthly3, 'monthly'],
+  ];
+
+  return dates.map(([d, type]) => ({
+    label: formatExpiryLabel(d),
+    date: d.getTime(),
+    dte: Math.max(0, daysBetween(today, d)),
+    type,
+  }));
+}
+
+/**
+ * Always recomputes from the current IST calendar date — never cached,
+ * never hardcoded — so the expiry list is automatically correct even if the
+ * app stays open across a day/Thursday rollover.
+ */
+export function getOptionExpiries(): OptionExpiry[] {
+  return buildOptionExpiries(getISTToday());
+}
 
 export function generateOptionChain(expiryIndex = 0): OptionChainData {
-  const expiry = OPTION_EXPIRIES[expiryIndex];
+  const expiry = getOptionExpiries()[expiryIndex];
   const T = expiry.dte / 365;
   const r = RISK_FREE_RATE;
   const S = NIFTY_SPOT;

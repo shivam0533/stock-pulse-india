@@ -1,7 +1,7 @@
 import { apiClient } from '@api/client';
 import { ENDPOINTS } from '@api/endpoints';
-import { MOCK_STOCKS, MOCK_INDICES, getStockHistory } from '@api/mockData';
-import type { Stock, MarketIndex, PricePoint, Timeframe } from '@/types';
+import { MOCK_STOCKS, getStockHistory } from '@api/mockData';
+import type { Stock, PricePoint, Timeframe } from '@/types';
 
 const USE_MOCK = import.meta.env.VITE_ENABLE_MOCK_API === 'true';
 
@@ -19,12 +19,6 @@ function delay<T>(value: T, ms = 250): Promise<T> {
 }
 
 export const stocksService = {
-  async list(): Promise<Stock[]> {
-    if (USE_MOCK) return delay(MOCK_STOCKS);
-    const { data } = await apiClient.get<Stock[]>(ENDPOINTS.stocks.list);
-    return data;
-  },
-
   async getBySymbol(symbol: string): Promise<Stock> {
     if (USE_MOCK) {
       const stock = MOCK_STOCKS.find((s) => s.symbol === symbol.toUpperCase());
@@ -64,25 +58,4 @@ export const stocksService = {
     return data;
   },
 
-  async getTopMovers(): Promise<{ gainers: Stock[]; losers: Stock[] }> {
-    if (USE_MOCK) {
-      const sorted = [...MOCK_STOCKS].sort(
-        (a, b) => b.changePercent - a.changePercent
-      );
-      return delay({
-        gainers: sorted.slice(0, 5),
-        losers: sorted.slice(-5).reverse(),
-      });
-    }
-    const { data } = await apiClient.get<{ gainers: Stock[]; losers: Stock[] }>(
-      ENDPOINTS.stocks.topMovers
-    );
-    return data;
-  },
-
-  async getIndices(): Promise<MarketIndex[]> {
-    if (USE_MOCK) return delay(MOCK_INDICES);
-    const { data } = await apiClient.get<MarketIndex[]>(ENDPOINTS.indices.list);
-    return data;
-  },
 };

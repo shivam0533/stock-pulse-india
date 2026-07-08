@@ -1,6 +1,7 @@
 import { Menu, Search } from 'lucide-react';
 import { MarketStatus } from '@components/common/MarketStatus';
 import { SearchBar } from '@components/common/SearchBar';
+import { BrokerConnectionBadge } from '@components/broker/BrokerConnectionBadge';
 import { NotificationsMenu } from './NotificationsMenu';
 import { UserMenu } from './UserMenu';
 import { useUIStore } from '@store/ui.store';
@@ -36,6 +37,8 @@ export function TopNavbar() {
 
         {/* Right cluster */}
         <div className="flex items-center gap-2 lg:gap-3 ml-auto">
+          <BrokerConnectionBadge />
+
           <div className="hidden md:block">
             <MarketStatus />
           </div>

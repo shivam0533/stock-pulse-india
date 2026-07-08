@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Briefcase, LayoutDashboard, LineChart, Menu, Star } from 'lucide-react';
+import { LayoutDashboard, Menu } from 'lucide-react';
 import { useUIStore } from '@store/ui.store';
 import { ROUTES } from '@utils/constants';
 import { cn } from '@utils/cn';
@@ -7,9 +7,6 @@ import type { NavItem } from '@/types';
 
 const TAB_ITEMS: NavItem[] = [
   { label: 'Dashboard', path: ROUTES.DASHBOARD, icon: LayoutDashboard },
-  { label: 'Markets', path: ROUTES.MARKETS, icon: LineChart },
-  { label: 'Portfolio', path: ROUTES.PORTFOLIO, icon: Briefcase },
-  { label: 'Watchlist', path: ROUTES.WATCHLIST, icon: Star },
 ];
 
 export function MobileBottomNav() {
@@ -24,7 +21,7 @@ export function MobileBottomNav() {
       )}
       aria-label="Primary"
     >
-      <div className="grid grid-cols-5 h-16">
+      <div className="grid grid-cols-2 h-16">
         {TAB_ITEMS.map((item) => (
           <NavLink
             key={item.path}

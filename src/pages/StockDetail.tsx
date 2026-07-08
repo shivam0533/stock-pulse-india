@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Star, Share2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Share2, AlertCircle } from 'lucide-react';
 import { Button, Card, Skeleton, Badge } from '@components/ui';
 import { PriceChart } from '@components/charts/PriceChart';
 import { PriceChange } from '@components/common/PriceChange';
 import { useStock, useStockHistory } from '@hooks/useStocks';
-import { useWatchlistStore } from '@store/watchlist.store';
 import { formatIndianNumber, formatINR, formatCompactNumber } from '@utils/format';
-import { TIMEFRAMES } from '@utils/constants';
+import { ROUTES, TIMEFRAMES } from '@utils/constants';
 import { cn } from '@utils/cn';
 import type { Timeframe } from '@/types';
 
@@ -18,9 +17,6 @@ export default function StockDetail() {
   const [timeframe, setTimeframe] = useState<Timeframe>('1M');
   const { data: stock, isLoading, error } = useStock(symbol);
   const { data: history, isLoading: historyLoading } = useStockHistory(symbol, timeframe);
-  const { has, toggle } = useWatchlistStore();
-
-  const isWatched = symbol ? has(symbol) : false;
 
   if (error) {
     return (
@@ -60,11 +56,11 @@ export default function StockDetail() {
         transition={{ duration: 0.2 }}
       >
         <Link
-          to="/markets"
+          to={ROUTES.DASHBOARD}
           className="inline-flex items-center gap-1.5 text-xs text-ink-200 hover:text-ink-50 transition-colors"
         >
           <ArrowLeft size={14} />
-          Back to markets
+          Back to dashboard
         </Link>
       </motion.div>
 
@@ -97,17 +93,6 @@ export default function StockDetail() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="md"
-              leftIcon={<Star size={14} fill={isWatched ? 'currentColor' : 'none'} />}
-              onClick={() =>
-                toggle({ symbol: stock.symbol, name: stock.name, exchange: stock.exchange })
-              }
-              className={isWatched ? 'text-brand-400 border-brand-400/40' : ''}
-            >
-              {isWatched ? 'Watching' : 'Watchlist'}
-            </Button>
             <Button variant="outline" size="icon" aria-label="Share">
               <Share2 size={14} />
             </Button>

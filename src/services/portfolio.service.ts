@@ -1,7 +1,7 @@
 import { apiClient } from '@api/client';
 import { ENDPOINTS } from '@api/endpoints';
 import { MOCK_PORTFOLIO_HOLDINGS, MOCK_STOCKS } from '@api/mockData';
-import type { PortfolioSummary, PortfolioHolding, NewsItem } from '@/types';
+import type { PortfolioSummary, PortfolioHolding } from '@/types';
 
 const USE_MOCK = import.meta.env.VITE_ENABLE_MOCK_API === 'true';
 
@@ -53,25 +53,6 @@ export const portfolioService = {
   async getSummary(): Promise<PortfolioSummary> {
     if (USE_MOCK) return delay(buildMockPortfolio());
     const { data } = await apiClient.get<PortfolioSummary>(ENDPOINTS.portfolio.summary);
-    return data;
-  },
-};
-
-// News service co-located - small enough
-import { MOCK_NEWS } from '@api/mockData';
-
-export const newsService = {
-  async getFeed(): Promise<NewsItem[]> {
-    if (USE_MOCK) return delay(MOCK_NEWS);
-    const { data } = await apiClient.get<NewsItem[]>(ENDPOINTS.news.feed);
-    return data;
-  },
-
-  async getByTicker(symbol: string): Promise<NewsItem[]> {
-    if (USE_MOCK) {
-      return delay(MOCK_NEWS.filter((n) => n.tickers.includes(symbol)));
-    }
-    const { data } = await apiClient.get<NewsItem[]>(ENDPOINTS.news.byTicker(symbol));
     return data;
   },
 };

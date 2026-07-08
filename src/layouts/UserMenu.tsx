@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Briefcase, LogOut, Settings, Star, User as UserIcon } from 'lucide-react';
+import { LogOut, Settings, User as UserIcon } from 'lucide-react';
 import { Avatar, Badge } from '@components/ui';
 import { useAuthStore } from '@store/auth.store';
 import { ROUTES } from '@utils/constants';
@@ -73,12 +73,6 @@ export function UserMenu() {
               </div>
             </div>
 
-            <button onClick={() => handleNavigate(ROUTES.PORTFOLIO)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-ink-100 hover:bg-ink-700 transition-colors">
-              <Briefcase size={15} /><span>Portfolio</span>
-            </button>
-            <button onClick={() => handleNavigate(ROUTES.WATCHLIST)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-ink-100 hover:bg-ink-700 transition-colors">
-              <Star size={15} /><span>Watchlist</span>
-            </button>
             <button onClick={() => handleNavigate(ROUTES.PROFILE)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-ink-100 hover:bg-ink-700 transition-colors">
               <UserIcon size={15} /><span>Profile</span>
             </button>

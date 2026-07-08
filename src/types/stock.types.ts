@@ -33,15 +33,6 @@ export interface Stock {
   dividend?: number;
 }
 
-export interface MarketIndex {
-  symbol: string;
-  name: string;
-  value: number;
-  change: number;
-  changePercent: number;
-  history: PricePoint[];
-}
-
 export interface PricePoint {
   timestamp: number;
   price: number;
@@ -83,30 +74,3 @@ export interface PortfolioSummary {
   holdings: PortfolioHolding[];
 }
 
-export interface PriceAlert {
-  price: number;
-  direction: 'above' | 'below';
-  triggered: boolean;
-}
-
-export interface WatchlistItem {
-  symbol: string;
-  name: string;
-  exchange: Exchange;
-  sector?: string;
-  addedAt: number;
-  isFavourite?: boolean;
-  priceAlert?: PriceAlert | null;
-}
-
-export interface NewsItem {
-  id: string;
-  title: string;
-  summary: string;
-  source: string;
-  url: string;
-  imageUrl?: string;
-  publishedAt: number;
-  tickers: string[];
-  category: 'markets' | 'economy' | 'earnings' | 'ipo' | 'crypto';
-}

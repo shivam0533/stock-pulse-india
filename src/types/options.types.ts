@@ -3,7 +3,16 @@ export type OptionExpiry = {
   date: number;      // timestamp
   dte: number;       // days to expiry
   type: 'weekly' | 'monthly';
+  /** Angel One instrument-master expiry key (e.g. "07JUL2026") — present only when the chain is live data; used to resolve the correct symbolToken automatically when placing a real order. */
+  raw?: string;
 };
+
+export interface OptionGreeks {
+  delta?: number;
+  gamma?: number;
+  theta?: number;
+  vega?: number;
+}
 
 export interface OptionStrike {
   strike: number;
@@ -13,12 +22,19 @@ export interface OptionStrike {
   callChgOI: number;    // change in OI (signed)
   callVolume: number;
   callIV: number;       // implied volatility %
+  /** Best bid/ask — only populated for live (Angel One) data. */
+  callBid?: number;
+  callAsk?: number;
+  callGreeks?: OptionGreeks;
   // Put side
   putLTP: number;
   putOI: number;
   putChgOI: number;
   putVolume: number;
   putIV: number;
+  putBid?: number;
+  putAsk?: number;
+  putGreeks?: OptionGreeks;
 }
 
 export interface OptionChainData {

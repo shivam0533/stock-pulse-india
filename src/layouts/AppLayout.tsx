@@ -5,6 +5,14 @@ import { Footer } from './Footer';
 import { MobileBottomNav } from './MobileBottomNav';
 import { SearchOverlay } from './SearchOverlay';
 import { Breadcrumb } from '@components/common/Breadcrumb';
+import { OptionTradeMonitor } from '@components/options/OptionTradeMonitor';
+import { AutoTradingMonitor } from '@components/options/AutoTradingMonitor';
+import { TradeNotificationToaster } from '@components/options/TradeNotificationToaster';
+import { NotificationEventBridge } from '@components/options/NotificationEventBridge';
+import { VoiceAnnouncer } from '@components/options/VoiceAnnouncer';
+import { BrokerSessionMonitor } from '@components/broker/BrokerSessionMonitor';
+import { BrokerToaster } from '@components/broker/BrokerToaster';
+import { AngelOneLiveModeSync } from '@components/broker/AngelOneLiveModeSync';
 
 export function AppLayout() {
   return (
@@ -12,6 +20,15 @@ export function AppLayout() {
       {/* Ambient background */}
       <div className="fixed inset-0 bg-grid opacity-40 pointer-events-none" />
       <div className="fixed inset-0 bg-radial-fade pointer-events-none" />
+
+      <OptionTradeMonitor />
+      <AutoTradingMonitor />
+      <TradeNotificationToaster />
+      <NotificationEventBridge />
+      <VoiceAnnouncer />
+      <BrokerSessionMonitor />
+      <BrokerToaster />
+      <AngelOneLiveModeSync />
 
       <Sidebar />
 

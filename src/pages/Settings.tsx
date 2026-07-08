@@ -10,6 +10,7 @@ import { Avatar, Badge, Button, Card, Modal } from '@components/ui';
 import { PasswordInput } from '@components/auth/PasswordInput';
 import { PasswordStrengthBar } from '@components/auth/PasswordStrengthBar';
 import { useAuthStore } from '@store/auth.store';
+import { useVoiceNotificationStore } from '@store/voiceNotification.store';
 import { ROUTES } from '@utils/constants';
 import { cn } from '@utils/cn';
 import { formatDate } from '@utils/format';
@@ -93,6 +94,7 @@ function SavedToast() {
 export default function Settings() {
   const navigate = useNavigate();
   const { user, logout, updateProfile, changePassword, error, clearError } = useAuthStore();
+  const { enabled: voiceEnabled, setEnabled: setVoiceEnabled } = useVoiceNotificationStore();
 
   // Notifications
   const [notifs, setNotifs] = useState({
@@ -224,6 +226,7 @@ export default function Settings() {
           <ToggleRow label="Market News" description="Breaking market news and corporate actions" checked={notifs.marketNews} onChange={(v) => setNotifs((s) => ({ ...s, marketNews: v }))} />
           <ToggleRow label="Email Digest" description="Weekly performance digest to your email" checked={notifs.emailDigest} onChange={(v) => setNotifs((s) => ({ ...s, emailDigest: v }))} />
           <ToggleRow label="Push Notifications" description="Browser push notifications when market opens" checked={notifs.pushNotifications} onChange={(v) => setNotifs((s) => ({ ...s, pushNotifications: v }))} />
+          <ToggleRow label="Voice Notifications" description="Speak Option Chain trade events out loud (BUY, Target, Stop Loss, and exits)" checked={voiceEnabled} onChange={setVoiceEnabled} />
           <div className="px-5 py-3 flex justify-end">
             <div className="flex items-center gap-3">
               {notifSaved && <SavedToast />}
