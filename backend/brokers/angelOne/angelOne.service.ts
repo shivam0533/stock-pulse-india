@@ -274,11 +274,6 @@ export class AngelOneService implements IAngelOneService {
       method: 'GET',
       headers: { ...authHeaders(token), ...networkHeaders },
     });
-    // TEMP DIAGNOSTIC — the funds widget is failing consistently in
-    // production; logging the raw envelope to see Angel One's real
-    // message/errorcode instead of guessing. Remove once diagnosed.
-    // eslint-disable-next-line no-console
-    console.log('[Funds] Raw SmartAPI response', JSON.stringify(body));
     const data = unwrapAngelOneEnvelope(body);
     const availableCash = Number(data.availablecash ?? 0);
     const m2mRealized = Number(data.m2mrealized ?? 0);
