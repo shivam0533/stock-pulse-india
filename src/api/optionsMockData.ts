@@ -138,6 +138,11 @@ function buildOptionExpiries(today: Date): OptionExpiry[] {
     date: d.getTime(),
     dte: Math.max(0, daysBetween(today, d)),
     type,
+    // Mock/demo data only — this module is unused by any real trading flow
+    // (see options.service.ts), so a placeholder lot size here never reaches
+    // an actual order. Real orders always source lotSize live from the
+    // Angel One instrument master via OptionExpiry.lotSize.
+    lotSize: 75,
   }));
 }
 

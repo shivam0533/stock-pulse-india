@@ -14,4 +14,8 @@ export const upstoxBrokerAdapter: BrokerAdapter = {
   placeOrder: async () => {
     throw new Error('Upstox is not connected. Complete broker authentication before placing live orders.');
   },
+
+  exitOrder: async () => {
+    throw new Error('Upstox is not connected. Complete broker authentication before exiting a live position.');
+  },
 };

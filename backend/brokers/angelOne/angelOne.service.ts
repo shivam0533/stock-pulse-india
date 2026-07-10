@@ -294,7 +294,7 @@ export class AngelOneService implements IAngelOneService {
     const token = await this.requireAccessToken();
     const networkHeaders = await getClientNetworkHeaders();
     const body = await requestWithRetry<Array<{
-      tradingsymbol: string; exchange: string; producttype: string; netqty: string; avgnetprice: string; ltp: string; pnl: string; buyqty: string; sellqty: string;
+      tradingsymbol: string; exchange: string; producttype: string; netqty: string; avgnetprice: string; ltp: string; pnl: string; buyqty: string; sellqty: string; symboltoken: string;
     }>>(this.http, {
       url: ANGEL_ONE_ENDPOINTS.POSITIONS,
       method: 'GET',
@@ -310,6 +310,7 @@ export class AngelOneService implements IAngelOneService {
       ltp: Number(p.ltp ?? 0),
       pnl: Number(p.pnl ?? 0),
       side: Number(p.buyqty ?? 0) >= Number(p.sellqty ?? 0) ? 'BUY' : 'SELL',
+      token: p.symboltoken,
     }));
   }
 

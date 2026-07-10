@@ -4,7 +4,7 @@ import { Modal, Button } from '@components/ui';
 import { useOptionTradeStore } from '@store/optionTrade.store';
 import { useOptionChainRiskStore } from '@store/optionChainRisk.store';
 import { getActiveBrokerAdapter } from '@services/broker/brokerExecution.service';
-import { getLotSize } from '@config/lotSize.config';
+import { getPaperLotSize } from '@config/lotSize.config';
 import { formatIndianNumber } from '@utils/format';
 import { cn } from '@utils/cn';
 import type { OptionOrderType, OptionProductType } from '@services/broker/broker.types';
@@ -22,6 +22,8 @@ export interface OrderDraft {
   /** Angel One instrument-master expiry key (e.g. "07JUL2026") — present only for a live chain; needed to resolve the correct symbolToken automatically for a real order. */
   expiryRaw?: string;
   ltp: number;
+  /** Real lot size for this expiry, sourced live from the Angel One instrument master. Required to place a real (non-paper) order. */
+  lotSize: number;
 }
 
 interface OrderWindowModalProps {
@@ -56,7 +58,6 @@ export function OrderWindowModal({ draft, onClose }: OrderWindowModalProps) {
   // Mirrors the same adapter resolution openTrade() uses, so the preview here
   // always matches what actually gets applied when Buy is clicked.
   const usedAdapterId = risk.paperTradingOnly ? 'PAPER' : getActiveBrokerAdapter().id;
-  const lotSize = getLotSize('NIFTY', usedAdapterId === 'PAPER');
 
   const [lots, setLots] = useState(1);
   const [customMode, setCustomMode] = useState(false);
@@ -82,6 +83,13 @@ export function OrderWindowModal({ draft, onClose }: OrderWindowModalProps) {
 
   if (!draft) return null;
 
+  // Live orders must use the real lot size from the broker instrument master
+  // (draft.lotSize, populated from Angel One's live data); Paper Trading uses
+  // its own configured simulated value instead.
+  const isPaper = usedAdapterId === 'PAPER';
+  const lotSizeValid = isPaper || (draft.lotSize > 0);
+  const lotSize = isPaper ? getPaperLotSize('NIFTY') : draft.lotSize;
+
   const quantity   = lotSize * lots;
   const limitPriceNum   = parseFloat(limitPrice);
   const triggerPriceNum = parseFloat(triggerPrice);
@@ -96,7 +104,7 @@ export function OrderWindowModal({ draft, onClose }: OrderWindowModalProps) {
   const maxLossAmount   = +(investment * risk.maxLossPercent / 100).toFixed(2);
   const maxProfitAmount = +(investment * risk.maxProfitPercent / 100).toFixed(2);
   const lotsValid = isValidLots(lots);
-  const formValid = lotsValid && limitPriceValid && triggerPriceValid;
+  const formValid = lotsValid && limitPriceValid && triggerPriceValid && lotSizeValid;
 
   const handleCustomChange = (raw: string) => {
     setCustomInput(raw);
@@ -118,6 +126,7 @@ export function OrderWindowModal({ draft, onClose }: OrderWindowModalProps) {
         expiryRaw: draft.expiryRaw,
         entryPrice: draft.ltp,
         lots,
+        lotSize: isPaper ? undefined : draft.lotSize,
         orderType,
         productType,
         limitPrice: needsLimitPrice ? limitPriceNum : undefined,
@@ -156,8 +165,13 @@ export function OrderWindowModal({ draft, onClose }: OrderWindowModalProps) {
         {/* ── Index / Lot size ─────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-2">
           <InfoTile label="Index" value="NIFTY" />
-          <InfoTile label="Lot Size" value={String(lotSize)} />
+          <InfoTile label="Lot Size" value={lotSizeValid ? String(lotSize) : 'Unavailable'} accent={lotSizeValid ? 'neutral' : 'loss'} />
         </div>
+        {!lotSizeValid && (
+          <p className="text-2xs text-loss -mt-2">
+            Live lot size unavailable from the broker instrument master. Refresh the option chain and try again.
+          </p>
+        )}
 
         {/* ── Lots picker ──────────────────────────────────────────────────── */}
         <div>

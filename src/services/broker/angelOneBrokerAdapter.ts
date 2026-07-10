@@ -1,6 +1,6 @@
 import { brokerApiClient, toBrokerApiError } from '@api/brokerApiClient';
 import { useBrokerConnectionStore } from '@store/brokerConnection.store';
-import type { BrokerAdapter, BrokerOrderRequest, BrokerOrderResult } from './broker.types';
+import type { BrokerAdapter, BrokerOrderRequest, BrokerOrderResult, BrokerExitRequest } from './broker.types';
 
 interface NiftyOrderResponse {
   orderId: string;
@@ -58,6 +58,41 @@ export const angelOneBrokerAdapter: BrokerAdapter = {
       );
       return {
         filledPrice: req.price,
+        brokerOrderId: data.data.orderId,
+      };
+    } catch (err) {
+      throw new Error(toBrokerApiError(err).message);
+    }
+  },
+
+  /**
+   * Real SELL order to close an existing long position (SL/Target/trailing-
+   * stop/manual-exit/auto-square-off) — backend/controllers/
+   * niftyOptionChain.controller.ts's exitOrder caps the quantity at whatever
+   * Angel One actually reports as held, so this can never place a naked
+   * short even if called with a stale/wrong quantity.
+   */
+  exitOrder: async (req: BrokerExitRequest): Promise<BrokerOrderResult> => {
+    if (!angelOneBrokerAdapter.isAuthenticated()) {
+      throw new Error('Angel One is not connected. Complete broker authentication before exiting a live position.');
+    }
+    if (!req.expiryRaw) {
+      throw new Error('Cannot place a real Angel One exit order — this trade has no resolvable expiry.');
+    }
+
+    try {
+      const { data } = await brokerApiClient.post<{ success: true; data: NiftyOrderResponse & { quantity: number } }>(
+        '/nifty/orders/exit',
+        {
+          strike: req.strike,
+          side: req.side,
+          expiryRaw: req.expiryRaw,
+          quantity: req.quantity,
+          productType: req.productType,
+        },
+      );
+      return {
+        filledPrice: 0, // SmartAPI's placeOrder response only confirms acceptance, not a fill price — the caller falls back to the live LTP that triggered this exit.
         brokerOrderId: data.data.orderId,
       };
     } catch (err) {

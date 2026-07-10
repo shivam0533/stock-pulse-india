@@ -47,6 +47,8 @@ export interface ActiveOptionTrade {
   exitTime: number | null;
   /** Set only when exitTrade() was called with 'AI_REVERSAL' — distinguishes an AI-triggered early exit from a plain user-initiated Manual Exit. Absent for every other exit path. */
   exitTrigger?: 'AI_REVERSAL';
+  /** True while a real broker SELL order is in flight to close this position (live trades only — paper trades close instantly). Blocks re-triggering SL/Target/manual-exit until the broker call settles. */
+  exitPending?: boolean;
 }
 
 export interface CompletedOptionTrade {

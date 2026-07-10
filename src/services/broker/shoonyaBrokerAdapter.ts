@@ -14,4 +14,8 @@ export const shoonyaBrokerAdapter: BrokerAdapter = {
   placeOrder: async () => {
     throw new Error('Shoonya is not connected. Complete broker authentication before placing live orders.');
   },
+
+  exitOrder: async () => {
+    throw new Error('Shoonya is not connected. Complete broker authentication before exiting a live position.');
+  },
 };

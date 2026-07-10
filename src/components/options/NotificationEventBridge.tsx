@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useOptionChain } from '@hooks/useOptionChain';
 import { selectBestTrade } from '@services/aiDecisionEngine.service';
 import { useAITradeSelectionStore } from '@store/aiTradeSelection.store';
+import { useAutoTradingStore } from '@store/autoTrading.store';
 import { useOptionTradeStore } from '@store/optionTrade.store';
 import { useNotificationsStore } from '@store/notifications.store';
 import { isMarketOpen } from '@utils/market';
@@ -103,6 +104,7 @@ export function NotificationEventBridge() {
       const result = selectBestTrade(
         { strikes: d.strikes, expiry: d.expiry.label, spotPrice: d.spotPrice, pcr: d.pcr, maxPain: d.maxPain },
         { minLTP, maxLTP },
+        useAutoTradingStore.getState().minConfidence,
       );
 
       if (result.recommendation === 'SELECT' && result.best && result.best.action === 'BUY') {

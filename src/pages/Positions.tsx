@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Layers, RefreshCw, Plug } from 'lucide-react';
 import { Card, Skeleton } from '@components/ui';
-import { optionsService, type NiftyPosition } from '@services/options.service';
+import { optionsService, subscribeToLivePositions, type NiftyPosition } from '@services/options.service';
 import { useBrokerConnectionStore } from '@store/brokerConnection.store';
 import { formatIndianNumber } from '@utils/format';
 import { cn } from '@utils/cn';
@@ -41,6 +41,19 @@ export default function Positions() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Live LTP/MTM — the backend pushes a fresh snapshot over SSE the instant
+  // a subscribed position's token ticks on the Angel One WebSocket, so this
+  // page no longer depends on the manual Refresh button to stay current.
+  useEffect(() => {
+    if (!isConnected) return;
+    setError(null);
+    const unsubscribe = subscribeToLivePositions((live) => {
+      setPositions(live);
+      setLoading(false);
+    });
+    return unsubscribe;
+  }, [isConnected]);
 
   const totalPnl = (positions ?? []).reduce((sum, p) => sum + p.pnl, 0);
 

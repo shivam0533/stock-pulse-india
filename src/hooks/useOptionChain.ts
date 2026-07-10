@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { optionsService, mapNiftyChainResponse, type NiftyChainResponse } from '@services/options.service';
+import { apiOrigin } from '@api/brokerApiClient';
 
 /**
  * useOptionChain(0) is called from six separate places (OptionChain.tsx,
@@ -10,7 +11,51 @@ import { optionsService, mapNiftyChainResponse, type NiftyChainResponse } from '
  * EventSource per expiryIndex across every caller, ref-counted so it's only
  * closed once the last consumer unmounts.
  */
-const activeStreams = new Map<number, { source: EventSource; refCount: number; closeTimer: ReturnType<typeof setTimeout> | null }>();
+interface StreamEntry {
+  source: EventSource;
+  refCount: number;
+  closeTimer: ReturnType<typeof setTimeout> | null;
+  reconnectTimer: ReturnType<typeof setTimeout> | null;
+}
+
+const activeStreams = new Map<number, StreamEntry>();
+
+const RECONNECT_DELAY_MS = 2000;
+
+/**
+ * A native EventSource auto-reconnects on a plain network drop, but NOT
+ * once its readyState reaches CLOSED — which is exactly what happens when
+ * an intermediary (Railway's proxy, any CDN/load balancer) enforces an idle
+ * or max-duration timeout on a long-lived connection and terminates it.
+ * Without this, that silent CLOSE meant the live tick stream simply stopped
+ * forever with zero indication — "Last Updated"/LTP froze on screen and the
+ * only way to recover was a full page reload (which re-mounts the hook and
+ * opens a fresh connection). This explicitly detects CLOSED and reopens.
+ */
+function connect(expiryIndex: number, queryClient: QueryClient): EventSource {
+  const source = new EventSource(`${apiOrigin()}/api/nifty/option-chain/stream?expiryIndex=${expiryIndex}`);
+  source.onmessage = (event) => {
+    try {
+      const chain = JSON.parse(event.data) as NiftyChainResponse;
+      queryClient.setQueryData(['option-chain', expiryIndex], mapNiftyChainResponse(chain));
+    } catch {
+      // Malformed frame — ignore, the next tick self-corrects.
+    }
+  };
+  source.onerror = () => {
+    if (source.readyState !== EventSource.CLOSED) return; // browser is already retrying on its own — nothing to do
+    const entry = activeStreams.get(expiryIndex);
+    if (!entry || entry.source !== source || entry.refCount <= 0) return; // superseded or no longer wanted
+    if (entry.reconnectTimer) return; // a reconnect is already scheduled
+    entry.reconnectTimer = setTimeout(() => {
+      const current = activeStreams.get(expiryIndex);
+      if (!current || current.refCount <= 0) return; // unmounted while waiting
+      current.reconnectTimer = null;
+      current.source = connect(expiryIndex, queryClient);
+    }, RECONNECT_DELAY_MS);
+  };
+  return source;
+}
 
 function subscribeToLiveChain(expiryIndex: number, queryClient: QueryClient): () => void {
   let entry = activeStreams.get(expiryIndex);
@@ -24,16 +69,7 @@ function subscribeToLiveChain(expiryIndex: number, queryClient: QueryClient): ()
   }
 
   if (!entry) {
-    const source = new EventSource(`/api/nifty/option-chain/stream?expiryIndex=${expiryIndex}`);
-    source.onmessage = (event) => {
-      try {
-        const chain = JSON.parse(event.data) as NiftyChainResponse;
-        queryClient.setQueryData(['option-chain', expiryIndex], mapNiftyChainResponse(chain));
-      } catch {
-        // Malformed frame — ignore, the next tick self-corrects.
-      }
-    };
-    entry = { source, refCount: 0, closeTimer: null };
+    entry = { source: connect(expiryIndex, queryClient), refCount: 0, closeTimer: null, reconnectTimer: null };
     activeStreams.set(expiryIndex, entry);
   }
   entry.refCount += 1;
@@ -58,6 +94,7 @@ function subscribeToLiveChain(expiryIndex: number, queryClient: QueryClient): ()
       current.closeTimer = setTimeout(() => {
         const stillUnused = activeStreams.get(expiryIndex);
         if (stillUnused && stillUnused.refCount <= 0) {
+          if (stillUnused.reconnectTimer) clearTimeout(stillUnused.reconnectTimer);
           stillUnused.source.close();
           activeStreams.delete(expiryIndex);
         }

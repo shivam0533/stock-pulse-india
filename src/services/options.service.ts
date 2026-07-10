@@ -1,4 +1,4 @@
-import { brokerApiClient, toBrokerApiError } from '@api/brokerApiClient';
+import { brokerApiClient, toBrokerApiError, apiOrigin } from '@api/brokerApiClient';
 import type { OptionChainData, OptionExpiry, OptionStrike, OptionGreeks } from '@/types';
 
 /**
@@ -55,7 +55,7 @@ export interface NiftyChainResponse {
 }
 
 function toOptionExpiry(e: NiftyExpiryResponse): OptionExpiry {
-  return { label: e.label, date: e.date, dte: e.dte, type: e.type, raw: e.raw };
+  return { label: e.label, date: e.date, dte: e.dte, type: e.type, raw: e.raw, lotSize: e.lotSize };
 }
 
 function toOptionStrike(row: NiftyChainRowResponse): OptionStrike {
@@ -108,6 +108,50 @@ export interface NiftyPosition {
   ltp: number;
   pnl: number;
   side: 'BUY' | 'SELL';
+}
+
+const POSITIONS_RECONNECT_DELAY_MS = 2000;
+
+/**
+ * Real-time NIFTY positions stream — the backend pushes a fresh snapshot
+ * over Server-Sent Events the instant a subscribed position's token ticks
+ * on the Angel One WebSocket (recomputing LTP/MTM live), instead of relying
+ * on a manual refresh. Mirrors the exact pattern useOptionChain.ts uses for
+ * /nifty/option-chain/stream, including the auto-reconnect: a native
+ * EventSource does NOT retry once its readyState reaches CLOSED, which is
+ * exactly what an intermediary (Railway's proxy, any CDN) does when it
+ * enforces an idle/max-duration timeout on a long-lived connection — without
+ * this, that silent close meant live P&L simply froze until a manual reload.
+ */
+export function subscribeToLivePositions(onSnapshot: (positions: NiftyPosition[]) => void): () => void {
+  let source: EventSource;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let stopped = false;
+
+  const connect = () => {
+    source = new EventSource(`${apiOrigin()}/api/nifty/positions/stream`);
+    source.onmessage = (event) => {
+      try {
+        onSnapshot(JSON.parse(event.data) as NiftyPosition[]);
+      } catch {
+        // Malformed frame — ignore, the next tick self-corrects.
+      }
+    };
+    source.onerror = () => {
+      if (stopped || source.readyState !== EventSource.CLOSED || reconnectTimer) return;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        if (!stopped) connect();
+      }, POSITIONS_RECONNECT_DELAY_MS);
+    };
+  };
+  connect();
+
+  return () => {
+    stopped = true;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    source.close();
+  };
 }
 
 export const optionsService = {

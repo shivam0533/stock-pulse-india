@@ -52,6 +52,8 @@ export interface AngelOnePosition {
   ltp: number;
   pnl: number;
   side: AngelOneTransactionType;
+  /** Instrument-master symbol token — used to subscribe this position to the live WebSocket tick stream for real-time LTP/MTM updates. */
+  token: string;
 }
 
 export interface AngelOneHolding {

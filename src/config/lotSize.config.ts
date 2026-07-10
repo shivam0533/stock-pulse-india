@@ -1,29 +1,19 @@
 /**
- * NSE lot sizes, keyed by index. Single source of truth for lot-size math
- * across the Option Chain module — every component reads through
- * getLotSize(), nothing hardcodes a lot size anywhere else.
+ * Lot size for Paper Trading only. NSE-notified lot sizes are NOT static
+ * (they change between contract cycles), so a real/live order must never
+ * use a constant here — it always sources its lot size live from the Angel
+ * One instrument master via OptionExpiry.lotSize (see
+ * backend/market/instrumentMaster.service.ts -> /api/nifty/expiries ->
+ * options.service.ts's toOptionExpiry() -> OptionExpiry.lotSize). Paper
+ * Trading has no real broker instrument to query, so it keeps its own
+ * simulated value here.
  */
 export type IndexSymbol = 'NIFTY';
 
-/**
- * Official NSE-notified lot sizes. Used automatically once a real broker
- * (Zerodha, Angel One, Upstox, Shoonya) is authenticated and executing the
- * order — real orders must match the exchange's actual contract size.
- */
-export const OFFICIAL_NSE_LOT_SIZES: Record<IndexSymbol, number> = {
-  NIFTY: 75,
-};
-
-/**
- * Lot size used in Paper Trading mode only. Change this value only — every
- * Option Chain calculation (Order Window, Quantity, Investment, Active
- * Trade, Trade History, Live P&L, Max Loss/Profit ₹, SL/Target) picks it up
- * automatically via getLotSize().
- */
 export const PAPER_TRADING_LOT_SIZES: Record<IndexSymbol, number> = {
   NIFTY: 65,
 };
 
-export function getLotSize(index: IndexSymbol = 'NIFTY', isPaperTrading = true): number {
-  return isPaperTrading ? PAPER_TRADING_LOT_SIZES[index] : OFFICIAL_NSE_LOT_SIZES[index];
+export function getPaperLotSize(index: IndexSymbol = 'NIFTY'): number {
+  return PAPER_TRADING_LOT_SIZES[index];
 }

@@ -212,6 +212,13 @@ export interface AITradeSelectionRange {
 export function selectBestTrade(
   chain: AITradeSelectionChain,
   range: AITradeSelectionRange,
+  // Single source of truth for the SELECT/WAIT confidence gate. Defaults to
+  // SELECTION_CONFIDENCE_THRESHOLD (80) for callers that don't have their
+  // own configurable value (AITradeSelectionPanel's display preview,
+  // NotificationEventBridge's general AI-signal notification). Auto Trading
+  // passes its own user-configured minConfidence here instead of relying on
+  // this default, so a change in Risk Management actually takes effect.
+  confidenceThreshold: number = SELECTION_CONFIDENCE_THRESHOLD,
 ): AITradeSelectionResult {
   const { minLTP, maxLTP } = range;
   const candidates: AITradeSelectionCandidate[] = [];
@@ -260,12 +267,12 @@ export function selectBestTrade(
 
   const best = candidates.reduce((a, b) => (b.confidence > a.confidence ? b : a));
   const recommendation: 'SELECT' | 'WAIT' =
-    best.confidence >= SELECTION_CONFIDENCE_THRESHOLD ? 'SELECT' : 'WAIT';
+    best.confidence >= confidenceThreshold ? 'SELECT' : 'WAIT';
 
   const reason =
     recommendation === 'SELECT'
       ? `Best setup: ${best.action} ${best.side} ${best.strike} at ₹${best.ltp} — ${best.confidence}% confidence across ${candidates.length} contract${candidates.length === 1 ? '' : 's'} in range.`
-      : `Highest confidence found is ${best.confidence}%, below the 80% threshold, across ${candidates.length} contract${candidates.length === 1 ? '' : 's'} in range — no trade selected.`;
+      : `Highest confidence found is ${best.confidence}%, below the ${confidenceThreshold}% threshold, across ${candidates.length} contract${candidates.length === 1 ? '' : 's'} in range — no trade selected.`;
 
   return { recommendation, best, contractsAnalyzed: candidates.length, reason, generatedAt: Date.now() };
 }

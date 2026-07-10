@@ -26,10 +26,21 @@ export interface BrokerOrderResult {
   brokerOrderId: string;
 }
 
+export interface BrokerExitRequest {
+  strike: number;
+  side: 'CE' | 'PE';
+  expiryRaw?: string;
+  /** Quantity to close — a real adapter caps this at whatever the broker actually reports as held, never blindly trusting this number. */
+  quantity: number;
+  productType: OptionProductType;
+}
+
 export interface BrokerAdapter {
   id: BrokerId;
   label: string;
   isAuthenticated(): boolean;
   /** Async because a real (non-paper) broker adapter makes a genuine network call. */
   placeOrder(req: BrokerOrderRequest): Promise<BrokerOrderResult>;
+  /** Closes an existing long position with a real SELL order (never a naked short — real adapters only ever close what's actually held). Every SL/Target/trailing-stop/manual-exit/auto-square-off path must call this for a live trade instead of only updating local state. */
+  exitOrder(req: BrokerExitRequest): Promise<BrokerOrderResult>;
 }

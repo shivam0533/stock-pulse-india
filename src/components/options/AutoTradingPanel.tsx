@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, Bot, Check, RotateCcw, ShieldAlert } from 'lucide-react';
 import {
   useAutoTradingStore,
@@ -39,19 +39,29 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 function NumberField({
   label, value, onChange, suffix,
 }: { label: string; value: number; onChange: (v: number) => void; suffix?: string }) {
+  // Free-typed text, decoupled from `value` — see OptionChainRiskSettings.tsx's
+  // PercentInput for why a native type="number" input bound straight to a
+  // re-validated number silently reverts mid-keystroke (e.g. typing "40"
+  // shows "4" once the "0" makes the parsed value momentarily invalid).
+  const [text, setText] = useState(String(value));
+  useEffect(() => { setText(String(value)); }, [value]);
+
   return (
     <div>
       <div className="text-2xs text-ink-300 uppercase tracking-wide mb-1">{label}</div>
       <div className="flex items-center gap-1.5 bg-ink-900/60 border border-ink-600/60 rounded-xl px-3 py-2 focus-within:border-brand-400/60 transition-colors">
         <input
-          type="number"
-          value={value}
-          min={0}
-          step={1}
+          type="text"
+          inputMode="decimal"
+          value={text}
           onChange={(e) => {
-            const v = parseFloat(e.target.value);
+            const raw = e.target.value;
+            if (!/^\d*\.?\d*$/.test(raw)) return;
+            setText(raw);
+            const v = parseFloat(raw);
             if (!Number.isNaN(v) && v >= 0) onChange(v);
           }}
+          onBlur={() => setText(String(value))}
           className="w-full bg-transparent font-mono text-sm text-ink-50 tabular-nums outline-none"
         />
         {suffix && <span className="text-2xs text-ink-400 shrink-0">{suffix}</span>}
@@ -88,6 +98,11 @@ export function AutoTradingPanel() {
   const paperTradingOnly = useOptionChainRiskStore((s) => s.paperTradingOnly);
   const isLiveMode = !paperTradingOnly;
   const [lotsDraft, setLotsDraft] = useState(lots);
+  // Free-typed text for the Lots input, decoupled from lotsDraft — see
+  // NumberField above for why a native type="number" input bound straight
+  // to a re-validated number can silently revert mid-keystroke on mobile.
+  const [lotsText, setLotsText] = useState(String(lots));
+  useEffect(() => { setLotsText(String(lotsDraft)); }, [lotsDraft]);
   const [draft, setDraft] = useState<GuardRailDraft>({
     minConfidence, maxTradesPerDay, maxDailyLoss, maxOpenPositions, trailingStopPercent,
   });
@@ -211,14 +226,17 @@ export function AutoTradingPanel() {
         </div>
         <div className="flex items-center gap-2">
           <input
-            type="number"
-            min={1}
-            step={1}
-            value={lotsDraft}
+            type="text"
+            inputMode="numeric"
+            value={lotsText}
             onChange={(e) => {
-              const v = parseInt(e.target.value, 10);
+              const raw = e.target.value;
+              if (!/^\d*$/.test(raw)) return;
+              setLotsText(raw);
+              const v = parseInt(raw, 10);
               if (!Number.isNaN(v) && v >= 1) setLotsDraft(v);
             }}
+            onBlur={() => setLotsText(String(lotsDraft))}
             className="flex-1 bg-ink-900/60 border border-ink-600/60 rounded-xl px-3 py-2 font-mono text-sm text-ink-50 outline-none focus:border-brand-400/60 transition-colors"
           />
           <button

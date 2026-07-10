@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, RotateCcw, ShieldAlert } from 'lucide-react';
 import {
   useOptionChainRiskStore,
@@ -14,6 +14,19 @@ function PercentInput({
   label: string; hint: string; value: number; min: number; max: number;
   accent: 'loss' | 'gain'; onChange: (v: number) => void;
 }) {
+  // Free-typed text, decoupled from `value` — a native type="number" input
+  // whose value prop is re-derived from a clamped/validated number snaps
+  // back mid-keystroke the instant a partial value falls outside [min, max]
+  // (e.g. typing "40" into a max={20} field: "4" commits fine, then "40"
+  // fails the range check, onChange never fires, and the next render resets
+  // the DOM input back to "4" — the "0" appears to vanish with no
+  // indication why). Typing itself is always reflected as-is here; only a
+  // fully in-range value gets propagated to the parent.
+  const [text, setText] = useState(String(value));
+  useEffect(() => { setText(String(value)); }, [value]);
+  const typed = parseFloat(text);
+  const outOfRange = text !== '' && (Number.isNaN(typed) || typed < min || typed > max);
+
   return (
     <div>
       <div className="flex items-baseline justify-between mb-1">
@@ -22,25 +35,32 @@ function PercentInput({
       </div>
       <div className="flex items-center gap-2">
         <input
-          type="number"
-          value={value}
-          min={min}
-          max={max}
-          step={0.5}
+          type="text"
+          inputMode="decimal"
+          value={text}
           onChange={(e) => {
-            const v = parseFloat(e.target.value);
+            const raw = e.target.value;
+            if (!/^\d*\.?\d*$/.test(raw)) return; // digits + at most one decimal point only
+            setText(raw);
+            const v = parseFloat(raw);
             if (!Number.isNaN(v) && v >= min && v <= max) onChange(v);
           }}
+          onBlur={() => setText(String(value))} // snap any abandoned invalid text back to the last applied value
           className={cn(
             'flex-1 bg-ink-900/60 border rounded-xl px-3 py-2',
             'font-mono text-sm tabular-nums outline-none transition-colors',
-            accent === 'loss'
-              ? 'border-loss-border/60 text-loss focus:border-loss/60'
-              : 'border-gain-border/60 text-gain focus:border-gain/60',
+            outOfRange
+              ? 'border-loss/60 text-loss'
+              : accent === 'loss'
+                ? 'border-loss-border/60 text-loss focus:border-loss/60'
+                : 'border-gain-border/60 text-gain focus:border-gain/60',
           )}
         />
         <span className="text-xs text-ink-400 shrink-0">%</span>
       </div>
+      {outOfRange && (
+        <p className="text-2xs text-loss mt-1">Must be between {min}% and {max}%.</p>
+      )}
     </div>
   );
 }
@@ -48,6 +68,9 @@ function PercentInput({
 function LimitInput({
   label, hint, value, onChange,
 }: { label: string; hint: string; value: number; onChange: (v: number) => void }) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => { setText(String(value)); }, [value]);
+
   return (
     <div>
       <div className="flex items-baseline justify-between mb-1">
@@ -55,14 +78,17 @@ function LimitInput({
         <span className="text-2xs text-ink-400">{hint}</span>
       </div>
       <input
-        type="number"
-        value={value}
-        min={0}
-        step={1}
+        type="text"
+        inputMode="numeric"
+        value={text}
         onChange={(e) => {
-          const v = parseInt(e.target.value, 10);
+          const raw = e.target.value;
+          if (!/^\d*$/.test(raw)) return;
+          setText(raw);
+          const v = parseInt(raw, 10);
           if (!Number.isNaN(v) && v >= 0) onChange(v);
         }}
+        onBlur={() => setText(String(value))}
         className="w-full bg-ink-900/60 border border-ink-600/60 rounded-xl px-3 py-2 font-mono text-sm text-ink-50 tabular-nums outline-none focus:border-brand-400/60 transition-colors"
       />
     </div>

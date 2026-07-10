@@ -5,7 +5,7 @@ import { angelOneWebSocketService } from '../market/angelOneWebSocket.service';
 import { AngelOneApiError } from '../brokers/angelOne/angelOneHttp';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 import { isMarketOpen } from '../utils/marketHours';
-import type { PlaceOrderRequest, AngelOneOrderType, AngelOneProductType } from '../brokers/angelOne/angelOne.types';
+import type { PlaceOrderRequest, AngelOneOrderType, AngelOneProductType, AngelOnePosition } from '../brokers/angelOne/angelOne.types';
 
 /** User-facing order type names (matches every broker's UI convention) mapped to SmartAPI's real enum values. */
 const ORDER_TYPE_MAP: Record<string, AngelOneOrderType> = {
@@ -49,6 +49,101 @@ export const niftyOptionChainController = {
     } catch (err) {
       handleError(res, err);
     }
+  },
+
+  /**
+   * Server-Sent Events stream of live NIFTY option positions — same
+   * REST payload getPositions() returns, kept fresh in real time by
+   * subscribing every open position's symbol token to the existing Angel
+   * One WebSocket tick stream (angelOneWebSocketService), recomputing
+   * LTP/MTM the instant a subscribed token ticks instead of waiting on a
+   * manual refresh. Reconnects automatically — angelOneWebSocketService
+   * already reconnects its socket on its own (RECONNECT_DELAY_MS) and
+   * re-subscribes every previously requested token once it's back up.
+   */
+  async streamPositions(req: Request, res: Response): Promise<void> {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+
+    let closed = false;
+    let subscribedTokens: string[] = [];
+    // token -> the REST position(s) it belongs to (NIFTY strangles rarely
+    // repeat a token, but this stays correct even if they did).
+    let latestPositions: Array<AngelOnePosition & { token: string }> = [];
+
+    const recompute = (): Array<Record<string, unknown>> =>
+      latestPositions.map((p) => {
+        const tick = p.token ? angelOneWebSocketService.getTick(p.token) : undefined;
+        const ltp = tick?.ltp ?? p.ltp;
+        return {
+          tradingSymbol: p.tradingSymbol,
+          exchange: p.exchange,
+          productType: p.productType,
+          quantity: p.quantity,
+          averagePrice: p.averagePrice,
+          ltp,
+          pnl: +((p.quantity * (ltp - p.averagePrice)).toFixed(2)),
+          side: p.side,
+        };
+      });
+
+    const push = (payload: Array<Record<string, unknown>>) => {
+      if (!closed) res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    // Refetches the REST position list (catches new/closed positions) and
+    // (re-)subscribes every open position's token to the WebSocket.
+    const refreshPositions = async () => {
+      if (closed) return;
+      try {
+        const positions = await angelOneService.getPositions();
+        latestPositions = positions.filter(
+          (p) => p.exchange === 'NFO' && p.tradingSymbol.startsWith('NIFTY') && !p.tradingSymbol.startsWith('NIFTYNXT'),
+        );
+        const tokens = latestPositions.map((p) => p.token).filter(Boolean);
+        if (tokens.length > 0) {
+          angelOneWebSocketService.ensureSubscribed(tokens, []);
+        }
+        subscribedTokens = tokens;
+        push(recompute());
+      } catch (err) {
+        if (!closed) {
+          const message = err instanceof Error ? err.message : 'Live positions stream error.';
+          res.write(`event: error\ndata: ${JSON.stringify({ message })}\n\n`);
+        }
+      }
+    };
+
+    let throttleTimer: ReturnType<typeof setTimeout> | null = null;
+    const onTick = (token: string) => {
+      if (!subscribedTokens.includes(token)) return; // not one of our open positions — ignore
+      if (throttleTimer) return;
+      throttleTimer = setTimeout(() => {
+        throttleTimer = null;
+        push(recompute());
+      }, STREAM_THROTTLE_MS);
+    };
+
+    angelOneWebSocketService.on('tick', onTick);
+    // Safety net: catches positions opened/closed elsewhere (or a token that
+    // never ticks) without relying solely on WebSocket activity.
+    const pollInterval = setInterval(() => { void refreshPositions(); }, 10_000);
+    const keepAlive = setInterval(() => {
+      if (!closed) res.write(': keep-alive\n\n');
+    }, 15000);
+
+    req.on('close', () => {
+      closed = true;
+      angelOneWebSocketService.off('tick', onTick);
+      clearInterval(pollInterval);
+      clearInterval(keepAlive);
+      if (throttleTimer) clearTimeout(throttleTimer);
+    });
+
+    await refreshPositions(); // initial snapshot + subscription immediately on connect
   },
 
   async getExpiries(_req: Request, res: Response): Promise<void> {
@@ -162,6 +257,100 @@ export const niftyOptionChainController = {
     });
 
     await sendSnapshot(); // initial snapshot immediately on connect
+  },
+
+  /**
+   * Places a real SELL order to close an existing NIFTY option LONG
+   * position — the only way this app ever sends transactionType: 'SELL'.
+   * Safety: the exit quantity is capped at whatever Angel One actually
+   * reports as currently held for this exact contract (never the caller's
+   * number blindly), and the request is rejected outright if no matching
+   * open long position exists — this can never be used to open a naked
+   * short. This is the counterpart the SL/Target/trailing-stop/manual-exit/
+   * auto-square-off paths were missing: previously they only updated this
+   * app's own local state and never told the broker to actually close the
+   * position, so a "closed" trade in this app could still be live and
+   * unprotected in the real Angel One account.
+   */
+  async exitOrder(req: Request, res: Response): Promise<void> {
+    const requestedAt = Date.now();
+    const body = req.body as {
+      strike: number; side: 'CE' | 'PE'; expiryRaw: string; quantity: number;
+      productType?: keyof typeof PRODUCT_TYPE_MAP;
+    };
+    const { strike, side, expiryRaw, quantity } = body;
+    const productTypeKey = body.productType ?? 'INTRADAY';
+
+    // eslint-disable-next-line no-console
+    console.log('[Exit Order] Requested', { strike, side, expiryRaw, quantity, productType: productTypeKey });
+
+    try {
+      if (!strike || !side || !expiryRaw || !quantity) {
+        sendError(res, 'strike, side, expiryRaw, and quantity are all required.', 400);
+        return;
+      }
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        sendError(res, 'Invalid quantity — must be a positive whole number.', 400);
+        return;
+      }
+      const productType = PRODUCT_TYPE_MAP[productTypeKey];
+      if (!productType) {
+        sendError(res, `Unsupported product type "${productTypeKey}". Use INTRADAY or CARRYFORWARD.`, 400);
+        return;
+      }
+
+      // ── Market hours — same window placeOrder() enforces; a real broker
+      // SELL is just as invalid outside session hours as a BUY. ──────────
+      if (!isMarketOpen()) {
+        sendError(res, 'NSE is closed (market hours are 9:15 AM - 3:30 PM IST, Mon-Fri). Order rejected.', 400);
+        return;
+      }
+
+      const contract = await niftyOptionChainService.resolveContract(expiryRaw, strike, side);
+
+      // ── The only guard that matters here: never sell more than is actually
+      // held, and never sell anything if nothing is actually held. ──
+      const positions: AngelOnePosition[] = await angelOneService.getPositions();
+      const held = positions.find((p) => p.exchange === 'NFO' && p.tradingSymbol === contract.symbol);
+      const heldQty = held?.quantity ?? 0;
+      if (heldQty <= 0) {
+        sendError(res, `No open long position found for ${contract.symbol} on Angel One — nothing to exit.`, 400);
+        return;
+      }
+      const exitQty = Math.min(quantity, heldQty);
+
+      const orderRequest: PlaceOrderRequest = {
+        tradingSymbol: contract.symbol,
+        symbolToken: contract.token,
+        exchange: 'NFO',
+        transactionType: 'SELL',
+        orderType: 'MARKET',
+        productType,
+        variety: 'NORMAL',
+        quantity: exitQty,
+      };
+
+      // eslint-disable-next-line no-console
+      console.log('[Exit Order] Sent to broker', { tradingSymbol: contract.symbol, symbolToken: contract.token, orderRequest });
+      const sentAt = Date.now();
+      const result = await angelOneService.placeOrder(orderRequest);
+      const latencyMs = Date.now() - sentAt;
+
+      // eslint-disable-next-line no-console
+      console.log('[Exit Order] Broker Response', { orderId: result.orderId, status: result.status, latencyMs, totalLatencyMs: Date.now() - requestedAt });
+
+      sendSuccess(res, { ...result, tradingSymbol: contract.symbol, quantity: exitQty }, 201);
+    } catch (err) {
+      const apiErr = err instanceof AngelOneApiError ? err : null;
+      // eslint-disable-next-line no-console
+      console.warn('[Exit Order] Rejected', {
+        strike, side, expiryRaw, quantity,
+        message: apiErr?.message ?? (err instanceof Error ? err.message : 'Unknown error'),
+        statusCode: apiErr?.statusCode ?? 500,
+        totalLatencyMs: Date.now() - requestedAt,
+      });
+      handleError(res, err);
+    }
   },
 
   async placeOrder(req: Request, res: Response): Promise<void> {

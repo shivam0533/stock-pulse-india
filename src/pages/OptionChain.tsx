@@ -68,7 +68,12 @@ export default function OptionChain() {
   const handleBuyOption = useCallback(
     (strike: number, side: 'CE' | 'PE', ltp: number) => {
       const selectedExpiry = expiries[filters.expiryIndex];
-      setOrderDraft({ strike, side, expiry: selectedExpiry?.label ?? '', expiryRaw: selectedExpiry?.raw, ltp });
+      setOrderDraft({
+        strike, side, ltp,
+        expiry: selectedExpiry?.label ?? '',
+        expiryRaw: selectedExpiry?.raw,
+        lotSize: selectedExpiry?.lotSize ?? 0,
+      });
     },
     [filters.expiryIndex, expiries],
   );

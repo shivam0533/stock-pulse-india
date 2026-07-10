@@ -5,7 +5,7 @@ import { angelOneBrokerAdapter } from './angelOneBrokerAdapter';
 import { upstoxBrokerAdapter } from './upstoxBrokerAdapter';
 import { shoonyaBrokerAdapter } from './shoonyaBrokerAdapter';
 import { kotakNeoBrokerAdapter } from './kotakNeoBrokerAdapter';
-import type { BrokerAdapter, BrokerId, BrokerOrderRequest, BrokerOrderResult } from './broker.types';
+import type { BrokerAdapter, BrokerId, BrokerOrderRequest, BrokerOrderResult, BrokerExitRequest } from './broker.types';
 
 const ADAPTERS: Record<BrokerId, BrokerAdapter> = {
   PAPER: paperBrokerAdapter,
@@ -27,4 +27,13 @@ export async function placeOptionOrder(req: BrokerOrderRequest): Promise<BrokerO
     throw new Error(`${adapter.label} is not authenticated. Connect and authenticate the broker before placing real orders.`);
   }
   return adapter.placeOrder(req);
+}
+
+/** Closes an existing position through the active broker adapter with a real SELL order. Async — a real adapter makes a genuine network call. */
+export async function exitOptionOrder(req: BrokerExitRequest): Promise<BrokerOrderResult> {
+  const adapter = getActiveBrokerAdapter();
+  if (!adapter.isAuthenticated()) {
+    throw new Error(`${adapter.label} is not authenticated. Connect and authenticate the broker before exiting a live position.`);
+  }
+  return adapter.exitOrder(req);
 }

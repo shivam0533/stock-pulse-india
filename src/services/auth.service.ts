@@ -1,5 +1,6 @@
 import { apiClient } from '@api/client';
 import { ENDPOINTS } from '@api/endpoints';
+import { STORAGE_KEYS } from '@utils/constants';
 import type {
   AuthResponse,
   LoginCredentials,
@@ -37,6 +38,26 @@ function delay<T>(value: T, ms = 600): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), ms));
 }
 
+/**
+ * Mock-mode-only: reads whatever user was actually stored at login/signup
+ * time (auth.store.ts's own zustand `persist`, key "sp_user") instead of
+ * always returning the same hardcoded MOCK_USER. Without this,
+ * getCurrentUser() — called by auth.store.ts's hydrate() on every page
+ * load/refresh — overwrote the real signed-in name with "Arjun Mehta"
+ * every single time, even though login/signup themselves stored the
+ * correct name; only hydrate()'s follow-up call clobbered it.
+ */
+function readStoredMockUser(): User | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.USER);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { state?: { user?: User | null } };
+    return parsed.state?.user ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export const authService = {
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     if (USE_MOCK) {
@@ -50,8 +71,14 @@ export const authService = {
           message: 'Password must be at least 6 characters',
         };
       }
+      // Reuse the name/profile from a previous signup/login with this same
+      // email (if any) instead of always resetting to the generic demo
+      // name — matches real auth behavior, where logging back in returns
+      // *your* account, not a fresh one.
+      const stored = readStoredMockUser();
+      const baseUser = stored && stored.email === credentials.email ? stored : MOCK_USER;
       return delay({
-        user: { ...MOCK_USER, email: credentials.email },
+        user: { ...baseUser, email: credentials.email },
         token: 'mock_token_' + Date.now(),
         refreshToken: 'mock_refresh_' + Date.now(),
         expiresIn: 3600,
@@ -93,7 +120,11 @@ export const authService = {
   },
 
   async getCurrentUser(): Promise<User> {
-    if (USE_MOCK) return delay(MOCK_USER);
+    // auth.store.ts's hydrate() calls this on every page load/refresh to
+    // re-verify the session — it must return the account that's actually
+    // signed in (readStoredMockUser()), not always the same hardcoded
+    // demo user, or every refresh silently resets the signed-in name.
+    if (USE_MOCK) return delay(readStoredMockUser() ?? MOCK_USER);
     const { data } = await apiClient.get<User>(ENDPOINTS.auth.me);
     return data;
   },

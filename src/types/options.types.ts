@@ -5,6 +5,8 @@ export type OptionExpiry = {
   type: 'weekly' | 'monthly';
   /** Angel One instrument-master expiry key (e.g. "07JUL2026") — present only when the chain is live data; used to resolve the correct symbolToken automatically when placing a real order. */
   raw?: string;
+  /** Real lot size for this expiry, sourced live from Angel One's instrument master (backend/market/instrumentMaster.service.ts). Never a static constant — NSE lot sizes change between contract cycles. Required for any real (non-paper) order's quantity calculation. */
+  lotSize: number;
 };
 
 export interface OptionGreeks {

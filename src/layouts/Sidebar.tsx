@@ -16,10 +16,25 @@ import {
 } from 'lucide-react';
 import { Logo } from '@components/common/Logo';
 import { useUIStore } from '@store/ui.store';
-import { useIsMobile } from '@hooks/useMediaQuery';
+import { useIsBelowLg } from '@hooks/useMediaQuery';
 import { ROUTES } from '@utils/constants';
 import { cn } from '@utils/cn';
+import { apiOrigin } from '@api/brokerApiClient';
 import type { NavItem } from '@/types';
+
+// TEMP DIAGNOSTIC — relays real on-device sidebar events to the backend log
+// so the actual runtime behavior on a real phone can be inspected without
+// needing DevTools access on that device. Remove once the drawer-close bug
+// is confirmed fixed.
+function relaySidebarLog(message: string): void {
+  // eslint-disable-next-line no-console
+  console.log(message);
+  fetch(`${apiOrigin()}/api/debug-log`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: `[Sidebar] ${message}` }),
+  }).catch(() => {});
+}
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', path: ROUTES.DASHBOARD, icon: LayoutDashboard },
@@ -34,10 +49,26 @@ const NAV_ITEMS: NavItem[] = [
 
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, mobileSidebarOpen, closeMobileSidebar } = useUIStore();
-  const isMobile = useIsMobile();
+  // Must match this component's own Tailwind `lg:` classes (lg:sticky,
+  // lg:z-30, lg:pointer-events-auto, the overlay's lg:hidden) exactly —
+  // see useIsBelowLg's doc comment for why useIsMobile()'s 768px threshold
+  // was the root cause of the drawer getting stuck open with a dead close
+  // button on any 768–1023px-wide viewport (e.g. most phones in landscape).
+  const isMobile = useIsBelowLg();
   const location = useLocation();
 
   const collapsed = !isMobile && sidebarCollapsed;
+
+  // TEMP DIAGNOSTIC — logs the exact state driving the drawer's visual
+  // position on every relevant change, so a real device's actual behavior
+  // is visible without DevTools.
+  useEffect(() => {
+    relaySidebarLog(
+      `render: innerWidth=${window.innerWidth}, isMobile=${isMobile}, mobileSidebarOpen=${mobileSidebarOpen}, ` +
+      `computed_x=${isMobile ? (mobileSidebarOpen ? 0 : -260) : 0}, pathname=${location.pathname}`,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile, mobileSidebarOpen, location.pathname]);
 
   // Belt-and-suspenders: close the mobile drawer the instant the route
   // actually changes, independent of whether the NavLink's own onClick fired
@@ -49,6 +80,17 @@ export function Sidebar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
+  // Escape key closes the drawer from anywhere on the page, not just via
+  // clicks inside the sidebar itself.
+  useEffect(() => {
+    if (!mobileSidebarOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeMobileSidebar();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mobileSidebarOpen, closeMobileSidebar]);
+
   return (
     <>
       {/* Mobile overlay */}
@@ -58,7 +100,7 @@ export function Sidebar() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={closeMobileSidebar}
+            onClick={() => { relaySidebarLog('overlay clicked'); closeMobileSidebar(); }}
             className="fixed inset-0 bg-ink-950/70 backdrop-blur-sm z-40 lg:hidden"
             aria-hidden
           />
@@ -90,7 +132,8 @@ export function Sidebar() {
           )}
           {isMobile && (
             <button
-              onClick={closeMobileSidebar}
+              onClick={() => { relaySidebarLog('X button clicked'); closeMobileSidebar(); }}
+              onTouchEnd={() => relaySidebarLog('X button touchend')}
               className="p-1.5 rounded-lg text-ink-200 hover:text-ink-50 hover:bg-ink-700"
               aria-label="Close sidebar"
             >
@@ -106,7 +149,7 @@ export function Sidebar() {
               key={item.path}
               to={item.path}
               end={item.path === ROUTES.DASHBOARD}
-              onClick={isMobile ? closeMobileSidebar : undefined}
+              onClick={isMobile ? () => { relaySidebarLog(`navlink clicked: ${item.path}`); closeMobileSidebar(); } : undefined}
               className={({ isActive }) =>
                 cn(
                   'group relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all',

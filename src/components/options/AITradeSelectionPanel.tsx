@@ -7,6 +7,7 @@ import {
   DEFAULT_AI_TRADE_SELECTION_SETTINGS,
   type AITradeSelectionSettings,
 } from '@store/aiTradeSelection.store';
+import { useAutoTradingStore } from '@store/autoTrading.store';
 import { formatIndianNumber } from '@utils/format';
 import { cn } from '@utils/cn';
 import type { AITradeSelectionResult, OptionChainData } from '@/types';
@@ -16,20 +17,30 @@ const ANALYSIS_INTERVAL_MS = 8000;
 function LTPInput({
   label, value, onChange,
 }: { label: string; value: number; onChange: (v: number) => void }) {
+  // Free-typed text, decoupled from `value` — see OptionChainRiskSettings.tsx's
+  // PercentInput for why a native type="number" input bound straight to a
+  // re-validated number silently reverts mid-keystroke (e.g. typing "40"
+  // shows "4" once the "0" makes the parsed value momentarily invalid).
+  const [text, setText] = useState(String(value));
+  useEffect(() => { setText(String(value)); }, [value]);
+
   return (
     <div>
       <div className="text-xs text-ink-200 mb-1">{label}</div>
       <div className="flex items-center gap-1.5 bg-ink-900/60 border border-ink-600/60 rounded-xl px-3 py-2 focus-within:border-brand-400/60 transition-colors">
         <span className="text-xs text-ink-400 shrink-0">₹</span>
         <input
-          type="number"
-          value={value}
-          min={0}
-          step={1}
+          type="text"
+          inputMode="decimal"
+          value={text}
           onChange={(e) => {
-            const v = parseFloat(e.target.value);
+            const raw = e.target.value;
+            if (!/^\d*\.?\d*$/.test(raw)) return;
+            setText(raw);
+            const v = parseFloat(raw);
             if (!Number.isNaN(v) && v >= 0) onChange(v);
           }}
+          onBlur={() => setText(String(value))}
           className="w-full bg-transparent font-mono text-sm text-ink-50 tabular-nums outline-none"
         />
       </div>
@@ -77,6 +88,7 @@ export function AITradeSelectionPanel({ data }: { data: OptionChainData | undefi
         selectBestTrade(
           { strikes: d.strikes, expiry: d.expiry.label, spotPrice: d.spotPrice, pcr: d.pcr, maxPain: d.maxPain },
           { minLTP, maxLTP },
+          useAutoTradingStore.getState().minConfidence,
         ),
       );
     };

@@ -170,7 +170,7 @@ export function ActiveTradePanel({ data }: { data?: OptionChainData }) {
     id, strike, side, expiry, entryPrice, currentLTP, stopLoss, target,
     lossPercent, profitPercent, lotSize, lots, quantity, investment,
     maxLossAmount, maxProfitAmount, status, entryTime, exitTime, exitTrigger,
-    orderType, productType,
+    orderType, productType, exitPending,
   } = activeTrade;
 
   // paperBrokerAdapter always mints "paper-<timestamp>-<random>" ids; a real
@@ -278,11 +278,12 @@ export function ActiveTradePanel({ data }: { data?: OptionChainData }) {
                 <button
                   type="button"
                   onClick={() => exitTrade()}
-                  title="Manual Exit"
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-2xs font-medium text-ink-200 border border-ink-600 hover:border-ink-400 hover:text-ink-50 bg-ink-700/60 transition-colors"
+                  disabled={exitPending}
+                  title={exitPending ? 'Placing real exit order with your broker…' : 'Manual Exit'}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-2xs font-medium text-ink-200 border border-ink-600 hover:border-ink-400 hover:text-ink-50 bg-ink-700/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <LogOut size={11} />
-                  Exit
+                  {exitPending ? 'Exiting…' : 'Exit'}
                 </button>
               )}
               {isExited && (
