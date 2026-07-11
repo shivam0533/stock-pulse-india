@@ -39,17 +39,15 @@ export async function ensureUsersTable(): Promise<void> {
   // safe to re-run on every startup, same convention as the CREATE TABLE
   // above; existing rows default to 'user'.
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';`);
-  // Data-integrity guard, not the security boundary (requireAdmin already
-  // only ever checks for the exact string 'admin') — still worth rejecting
-  // any other value at the DB level in case a future code path writes role
-  // without going through auth.service.ts's own admin-email check.
-  await pool.query(`
-    DO $$ BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_role_check') THEN
-        ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('user', 'admin'));
-      END IF;
-    END $$;
-  `);
+  // Data-integrity guard, not the security boundary (requireAdmin/
+  // requireSuperAdmin check the exact role strings themselves) — still
+  // worth rejecting any other value at the DB level. Unconditional
+  // drop-and-recreate (not "IF NOT EXISTS, skip") since this needed
+  // widening from a 2-value ('user','admin') check to 3 ('user','admin',
+  // 'super_admin') for RBAC — an IF-NOT-EXISTS guard would have silently
+  // kept the old, narrower constraint once it already existed.
+  await pool.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;`);
+  await pool.query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('user', 'admin', 'super_admin'));`);
   // eslint-disable-next-line no-console
   console.log('[DB] users table ready');
 }
@@ -148,4 +146,50 @@ export async function ensureAdminTables(): Promise<void> {
 
   // eslint-disable-next-line no-console
   console.log('[DB] admin tables ready');
+}
+
+/**
+ * Called once at startup, alongside the two functions above — the
+ * Subscription & Trial system's tables/columns. Same "no migration
+ * framework, plain CREATE/ALTER IF NOT EXISTS" convention as the rest of
+ * this file.
+ */
+export async function ensureSubscriptionTables(): Promise<void> {
+  if (!connectionString) return;
+
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_start_date TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_end_date TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'ACTIVE';`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_end_date TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_subscription_status_check;`);
+  await pool.query(`ALTER TABLE users ADD CONSTRAINT users_subscription_status_check CHECK (subscription_status IN ('TRIAL', 'ACTIVE', 'EXPIRED', 'CANCELLED'));`);
+  // Grandfathers in every account that existed before this migration ran
+  // (including ones with no trial_start_date yet) with 30 days of full
+  // access, rather than instantly locking them out the moment this deploys.
+  await pool.query(`
+    UPDATE users SET subscription_status = 'ACTIVE', subscription_end_date = now() + interval '30 days'
+    WHERE trial_start_date IS NULL;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS payment_requests (
+      id UUID PRIMARY KEY,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      utr TEXT NOT NULL,
+      screenshot TEXT,
+      amount_inr NUMERIC NOT NULL DEFAULT 5999,
+      status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED')),
+      reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      reviewed_at TIMESTAMPTZ,
+      rejection_reason TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_payment_requests_status ON payment_requests (status);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_payment_requests_user_id ON payment_requests (user_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_payment_requests_created_at ON payment_requests (created_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_subscription_status ON users (subscription_status);`);
+
+  // eslint-disable-next-line no-console
+  console.log('[DB] subscription tables ready');
 }

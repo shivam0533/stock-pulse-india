@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { niftyOptionChainService } from '../market/niftyOptionChain.service';
-import { angelOneService } from '../brokers/angelOne/angelOne.service';
+import { getOrCreateAngelOneSession } from '../brokers/angelOne/angelOneSessionRegistry';
 import { angelOneWebSocketService } from '../market/angelOneWebSocket.service';
 import { AngelOneApiError } from '../brokers/angelOne/angelOneHttp';
 import { sendSuccess, sendError } from '../utils/apiResponse';
@@ -24,9 +24,24 @@ const PRODUCT_TYPE_MAP: Record<string, AngelOneProductType> = {
 const STREAM_THROTTLE_MS = 300;
 
 /**
+ * Per-user lock covering both placeOrder and exitOrder — the frontend's own
+ * in-flight guards (optionTrade.store.ts's openInFlight/exitInFlight) only
+ * protect against races within a single browser tab; they share nothing
+ * across two open tabs or two devices logged into the same account. This
+ * backend lock is the actual authority: two concurrent requests for the
+ * same user (any combination of place/exit) — a double-click, a retry, or
+ * a second tab — have the second one rejected outright instead of both
+ * reaching the broker, which previously could place a duplicate entry order
+ * or oversell into a naked short (see exitOrder's held-quantity comment).
+ */
+const orderLockByUser = new Set<string>();
+
+/**
  * HTTP glue for the real, live NIFTY Option Chain (requirements 2-8) — all
  * real logic (instrument resolution, live ticks, order placement) lives in
- * niftyOptionChainService / angelOneService. Scoped ONLY to NIFTY options.
+ * niftyOptionChainService / AngelOneService. Scoped ONLY to NIFTY options.
+ * Every handler resolves the requesting user's own broker session via
+ * getOrCreateAngelOneSession(req.userId) — never a shared/global instance.
  */
 function handleError(res: Response, err: unknown): void {
   if (err instanceof AngelOneApiError) {
@@ -39,9 +54,9 @@ function handleError(res: Response, err: unknown): void {
 
 export const niftyOptionChainController = {
   /** Real, live positions from the connected Angel One account — scoped to NIFTY options only (never BANKNIFTY/FINNIFTY/equity). */
-  async getPositions(_req: Request, res: Response): Promise<void> {
+  async getPositions(req: Request, res: Response): Promise<void> {
     try {
-      const positions = await angelOneService.getPositions();
+      const positions = await getOrCreateAngelOneSession(req.userId!).getPositions();
       const niftyOptionPositions = positions.filter(
         (p) => p.exchange === 'NFO' && p.tradingSymbol.startsWith('NIFTY') && !p.tradingSymbol.startsWith('NIFTYNXT'),
       );
@@ -68,6 +83,9 @@ export const niftyOptionChainController = {
       Connection: 'keep-alive',
     });
 
+    // Resolved once for this connection's lifetime — the user doesn't
+    // change mid-SSE-stream, so no need to re-resolve on every tick.
+    const angelOne = getOrCreateAngelOneSession(req.userId!);
     let closed = false;
     let subscribedTokens: string[] = [];
     // token -> the REST position(s) it belongs to (NIFTY strangles rarely
@@ -99,7 +117,7 @@ export const niftyOptionChainController = {
     const refreshPositions = async () => {
       if (closed) return;
       try {
-        const positions = await angelOneService.getPositions();
+        const positions = await angelOne.getPositions();
         latestPositions = positions.filter(
           (p) => p.exchange === 'NFO' && p.tradingSymbol.startsWith('NIFTY') && !p.tradingSymbol.startsWith('NIFTYNXT'),
         );
@@ -274,6 +292,8 @@ export const niftyOptionChainController = {
    */
   async exitOrder(req: Request, res: Response): Promise<void> {
     const requestedAt = Date.now();
+    const userId = req.userId!;
+    const angelOne = getOrCreateAngelOneSession(userId);
     const body = req.body as {
       strike: number; side: 'CE' | 'PE'; expiryRaw: string; quantity: number;
       productType?: keyof typeof PRODUCT_TYPE_MAP;
@@ -283,6 +303,12 @@ export const niftyOptionChainController = {
 
     // eslint-disable-next-line no-console
     console.log('[Exit Order] Requested', { strike, side, expiryRaw, quantity, productType: productTypeKey });
+
+    if (orderLockByUser.has(userId)) {
+      sendError(res, 'Another order request for your account is still being processed. Please wait.', 409);
+      return;
+    }
+    orderLockByUser.add(userId);
 
     try {
       if (!strike || !side || !expiryRaw || !quantity) {
@@ -310,7 +336,7 @@ export const niftyOptionChainController = {
 
       // ── The only guard that matters here: never sell more than is actually
       // held, and never sell anything if nothing is actually held. ──
-      const positions: AngelOnePosition[] = await angelOneService.getPositions();
+      const positions: AngelOnePosition[] = await angelOne.getPositions();
       const held = positions.find((p) => p.exchange === 'NFO' && p.tradingSymbol === contract.symbol);
       const heldQty = held?.quantity ?? 0;
       if (heldQty <= 0) {
@@ -333,7 +359,7 @@ export const niftyOptionChainController = {
       // eslint-disable-next-line no-console
       console.log('[Exit Order] Sent to broker', { tradingSymbol: contract.symbol, symbolToken: contract.token, orderRequest });
       const sentAt = Date.now();
-      const result = await angelOneService.placeOrder(orderRequest);
+      const result = await angelOne.placeOrder(orderRequest);
       const latencyMs = Date.now() - sentAt;
 
       // eslint-disable-next-line no-console
@@ -350,11 +376,15 @@ export const niftyOptionChainController = {
         totalLatencyMs: Date.now() - requestedAt,
       });
       handleError(res, err);
+    } finally {
+      orderLockByUser.delete(userId);
     }
   },
 
   async placeOrder(req: Request, res: Response): Promise<void> {
     const requestedAt = Date.now();
+    const userId = req.userId!;
+    const angelOne = getOrCreateAngelOneSession(userId);
     const body = req.body as {
       strike: number; side: 'CE' | 'PE'; expiryRaw: string; quantity: number;
       orderType?: keyof typeof ORDER_TYPE_MAP; productType?: keyof typeof PRODUCT_TYPE_MAP;
@@ -366,6 +396,12 @@ export const niftyOptionChainController = {
 
     // eslint-disable-next-line no-console
     console.log('[Order] Requested', { strike, side, expiryRaw, quantity, orderType: orderTypeKey, productType: productTypeKey });
+
+    if (orderLockByUser.has(userId)) {
+      sendError(res, 'Another order request for your account is still being processed. Please wait.', 409);
+      return;
+    }
+    orderLockByUser.add(userId);
 
     try {
       // ── Basic shape validation ──────────────────────────────────────────
@@ -422,7 +458,7 @@ export const niftyOptionChainController = {
       const estimatedCost = (price ?? 0) * quantity;
       if (estimatedCost > 0) {
         try {
-          const funds = await angelOneService.getFunds();
+          const funds = await angelOne.getFunds();
           if (funds.availableCash < estimatedCost) {
             sendError(res, `Insufficient margin — need ~₹${estimatedCost.toFixed(2)}, available ₹${funds.availableCash.toFixed(2)}.`, 400);
             return;
@@ -450,7 +486,7 @@ export const niftyOptionChainController = {
       // eslint-disable-next-line no-console
       console.log('[Order] Sent to broker', { tradingSymbol: contract.symbol, symbolToken: contract.token, orderRequest });
       const sentAt = Date.now();
-      const result = await angelOneService.placeOrder(orderRequest);
+      const result = await angelOne.placeOrder(orderRequest);
       const latencyMs = Date.now() - sentAt;
 
       // eslint-disable-next-line no-console
@@ -467,6 +503,8 @@ export const niftyOptionChainController = {
         totalLatencyMs: Date.now() - requestedAt,
       });
       handleError(res, err);
+    } finally {
+      orderLockByUser.delete(userId);
     }
   },
 };

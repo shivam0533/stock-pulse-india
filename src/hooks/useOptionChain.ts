@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { optionsService, mapNiftyChainResponse, type NiftyChainResponse } from '@services/options.service';
-import { apiOrigin } from '@api/brokerApiClient';
+import { apiOrigin, authTokenQueryParam } from '@api/brokerApiClient';
 
 /**
  * useOptionChain(0) is called from six separate places (OptionChain.tsx,
@@ -33,7 +33,7 @@ const RECONNECT_DELAY_MS = 2000;
  * opens a fresh connection). This explicitly detects CLOSED and reopens.
  */
 function connect(expiryIndex: number, queryClient: QueryClient): EventSource {
-  const source = new EventSource(`${apiOrigin()}/api/nifty/option-chain/stream?expiryIndex=${expiryIndex}`);
+  const source = new EventSource(`${apiOrigin()}/api/nifty/option-chain/stream?expiryIndex=${expiryIndex}&${authTokenQueryParam()}`);
   source.onmessage = (event) => {
     try {
       const chain = JSON.parse(event.data) as NiftyChainResponse;

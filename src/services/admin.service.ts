@@ -2,7 +2,7 @@ import { apiClient } from '@api/client';
 import { ENDPOINTS } from '@api/endpoints';
 import type {
   AdminUserSummary, AdminDashboardStats, LoginLogEntry, AdminLogEntry,
-  AdminNotificationEntry, AdminNotificationType, AdminSettings,
+  AdminNotificationEntry, AdminNotificationType, AdminSettings, UserRole,
 } from '@/types';
 
 /** Server-side-paginated result shape every /api/admin/* list endpoint returns. */
@@ -34,6 +34,12 @@ export const adminService = {
 
   async getUser(id: string): Promise<AdminUserSummary> {
     const { data } = await apiClient.get<AdminUserSummary>(ENDPOINTS.admin.user(id));
+    return data;
+  },
+
+  /** SUPER_ADMIN only — server-enforced by requireSuperAdmin regardless of what the client sends. */
+  async updateUserRole(id: string, role: UserRole): Promise<AdminUserSummary> {
+    const { data } = await apiClient.put<AdminUserSummary>(ENDPOINTS.admin.userRole(id), { role });
     return data;
   },
 

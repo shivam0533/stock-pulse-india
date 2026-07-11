@@ -5,16 +5,18 @@ import { AngelOneApiError } from '../brokers/angelOne/angelOneHttp';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 
 /**
- * Simple, brokerId-less mock API surface — always resolves to Angel One via
- * BrokerManagerService (the same registry/service the multi-broker
- * :brokerId routes in broker.controller.ts use), so there is exactly one
- * place that owns real session state. Each handler maps a thrown
- * AngelOneApiError to its real statusCode (401 for an expired/missing
- * session, SmartAPI's own upstream status otherwise) instead of the shared
- * error middleware's blanket 500.
+ * Simple, brokerId-less API surface — this is the route the frontend's
+ * real Angel One login modal actually calls (POST /api/broker/login,
+ * matched before the parameterized /api/broker/:brokerId/* routes). Always
+ * resolves to Angel One via BrokerManagerService, scoped to the requesting
+ * app user (req.userId, set by requireAuth on brokerMock.routes.ts) — never
+ * a shared/global session, so one user's login can never be visible to
+ * another. Each handler maps a thrown AngelOneApiError to its real
+ * statusCode (401 for an expired/missing session, SmartAPI's own upstream
+ * status otherwise) instead of the shared error middleware's blanket 500.
  */
-function getDefaultBroker() {
-  return brokerManagerService.getBroker(ANGEL_ONE_BROKER_ID);
+function getDefaultBroker(req: Request) {
+  return brokerManagerService.getBroker(ANGEL_ONE_BROKER_ID, req.userId!);
 }
 
 function handleError(res: Response, err: unknown): void {
@@ -34,7 +36,7 @@ export const brokerMockController = {
       return;
     }
     try {
-      const session = await getDefaultBroker().login({
+      const session = await getDefaultBroker(req).login({
         clientCode: String(clientCode),
         pin: String(pin),
         totp: String(totp),
@@ -45,63 +47,63 @@ export const brokerMockController = {
     }
   },
 
-  async logout(_req: Request, res: Response): Promise<void> {
+  async logout(req: Request, res: Response): Promise<void> {
     try {
-      const result = await getDefaultBroker().logout();
+      const result = await getDefaultBroker(req).logout();
       sendSuccess(res, result, 200);
     } catch (err) {
       handleError(res, err);
     }
   },
 
-  async getProfile(_req: Request, res: Response): Promise<void> {
+  async getProfile(req: Request, res: Response): Promise<void> {
     try {
-      const profile = await getDefaultBroker().getProfile();
+      const profile = await getDefaultBroker(req).getProfile();
       sendSuccess(res, profile, 200);
     } catch (err) {
       handleError(res, err);
     }
   },
 
-  async getFunds(_req: Request, res: Response): Promise<void> {
+  async getFunds(req: Request, res: Response): Promise<void> {
     try {
-      const funds = await getDefaultBroker().getFunds();
+      const funds = await getDefaultBroker(req).getFunds();
       sendSuccess(res, funds, 200);
     } catch (err) {
       handleError(res, err);
     }
   },
 
-  async getPositions(_req: Request, res: Response): Promise<void> {
+  async getPositions(req: Request, res: Response): Promise<void> {
     try {
-      const positions = await getDefaultBroker().getPositions();
+      const positions = await getDefaultBroker(req).getPositions();
       sendSuccess(res, positions, 200);
     } catch (err) {
       handleError(res, err);
     }
   },
 
-  async getHoldings(_req: Request, res: Response): Promise<void> {
+  async getHoldings(req: Request, res: Response): Promise<void> {
     try {
-      const holdings = await getDefaultBroker().getHoldings();
+      const holdings = await getDefaultBroker(req).getHoldings();
       sendSuccess(res, holdings, 200);
     } catch (err) {
       handleError(res, err);
     }
   },
 
-  async getOrderBook(_req: Request, res: Response): Promise<void> {
+  async getOrderBook(req: Request, res: Response): Promise<void> {
     try {
-      const orders = await getDefaultBroker().getOrderBook();
+      const orders = await getDefaultBroker(req).getOrderBook();
       sendSuccess(res, orders, 200);
     } catch (err) {
       handleError(res, err);
     }
   },
 
-  async getTradeBook(_req: Request, res: Response): Promise<void> {
+  async getTradeBook(req: Request, res: Response): Promise<void> {
     try {
-      const trades = await getDefaultBroker().getTradeBook();
+      const trades = await getDefaultBroker(req).getTradeBook();
       sendSuccess(res, trades, 200);
     } catch (err) {
       handleError(res, err);

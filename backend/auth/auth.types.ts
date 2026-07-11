@@ -13,7 +13,9 @@ export interface UserPreferences {
   };
 }
 
-export type AppUserRole = 'user' | 'admin';
+export type AppUserRole = 'user' | 'admin' | 'super_admin';
+
+export type AppSubscriptionStatus = 'TRIAL' | 'ACTIVE' | 'EXPIRED' | 'CANCELLED';
 
 export interface AppUser {
   id: string;
@@ -26,6 +28,10 @@ export interface AppUser {
   joinedAt: number;
   preferences: UserPreferences;
   role: AppUserRole;
+  subscriptionStatus: AppSubscriptionStatus;
+  trialEndDate: number | null;
+  subscriptionEndDate: number | null;
+  isTradingLocked: boolean;
 }
 
 export interface AuthResponse {

@@ -7,7 +7,7 @@ declare global {
   namespace Express {
     interface Request {
       userId?: string;
-      userRole?: 'user' | 'admin';
+      userRole?: 'user' | 'admin' | 'super_admin';
     }
   }
 }
@@ -42,14 +42,29 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 }
 
 /**
- * Gates every /api/admin/* route. Must run after requireAuth (relies on
- * req.userRole, decoded straight from the JWT — never trusts a client-sent
- * header/body field). Role is checked server-side only; the frontend's own
- * route guard is a UX convenience, not the security boundary.
+ * Gates every /api/admin/* route — ADMIN and SUPER_ADMIN both pass; USER
+ * does not. Must run after requireAuth (relies on req.userRole, decoded
+ * straight from the JWT — never trusts a client-sent header/body field).
+ * Role is checked server-side only; the frontend's own route guard is a
+ * UX convenience, not the security boundary.
  */
 export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-  if (req.userRole !== 'admin') {
+  if (req.userRole !== 'admin' && req.userRole !== 'super_admin') {
     sendError(res, 'Admin access required.', 403);
+    return;
+  }
+  next();
+}
+
+/**
+ * Gates the SUPER_ADMIN-only surface: managing admin roles and app-wide
+ * Settings (Maintenance Mode, Trading Enabled, etc.) — ADMIN is
+ * deliberately excluded even though it passes requireAdmin above. Must run
+ * after requireAuth.
+ */
+export function requireSuperAdmin(req: Request, res: Response, next: NextFunction): void {
+  if (req.userRole !== 'super_admin') {
+    sendError(res, 'Super admin access required.', 403);
     return;
   }
   next();

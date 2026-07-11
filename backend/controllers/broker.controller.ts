@@ -15,7 +15,9 @@ import { sendSuccess, sendError } from '../utils/apiResponse';
  */
 function resolveBroker(req: Request) {
   const brokerId = req.params.brokerId.toUpperCase() as SupportedBrokerId;
-  return brokerManagerService.getBroker(brokerId);
+  // req.userId is always set here — every route in broker.routes.ts is
+  // behind requireAuth now, which runs before this.
+  return brokerManagerService.getBroker(brokerId, req.userId!);
 }
 
 function hasStatusCode(err: unknown): err is { message: string; statusCode: number } {

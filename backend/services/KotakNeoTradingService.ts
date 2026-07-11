@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance } from 'axios';
-import { kotakNeoService } from './kotakNeoService';
+import type { KotakNeoService } from './kotakNeoService';
 import { KotakNeoApiError, extractKotakError, requestWithRetry, toJDataForm } from './kotakNeoHttp';
 import { KOTAK_NEO_TRADING_ENDPOINTS, KOTAK_NEO_ORDER_SOURCE } from './kotakNeoTrading.constants';
 import type { KotakNeoSession } from './kotakNeo.types';
@@ -22,12 +22,15 @@ import type {
  * names are verified directly from the official Kotak-Neo/Kotak-neo-api-v2
  * SDK source and docs (see kotakNeoTrading.constants.ts).
  *
- * Session integration (requirements 4/5): every method below calls
- * kotakNeoService.getActiveSession() itself — callers never pass a token.
- * If a session is present and not expired, the call proceeds immediately;
- * the user is never asked to log in again. If it's missing or expired,
- * this throws a real 401 (KotakNeoApiError) instead of attempting a
- * request that Kotak would reject anyway.
+ * Session integration: every method takes the caller's own per-user
+ * KotakNeoService instance (resolved via kotakNeoSessionRegistry, keyed by
+ * this app's own user id) and reads getActiveSession() from it — this class
+ * itself holds no session state and is a shared singleton across users,
+ * same as before; only *whose* session each call reads has changed. If a
+ * session is present and not expired, the call proceeds immediately; the
+ * user is never asked to log in again. If it's missing or expired, this
+ * throws a real 401 (KotakNeoApiError) instead of attempting a request that
+ * Kotak would reject anyway.
  */
 export class KotakNeoTradingService {
   private readonly http: AxiosInstance;
@@ -38,8 +41,8 @@ export class KotakNeoTradingService {
     this.http = axios.create({ timeout: 15000 });
   }
 
-  private requireSession(): KotakNeoSession {
-    const session = kotakNeoService.getActiveSession();
+  private requireSession(kotakNeo: KotakNeoService): KotakNeoSession {
+    const session = kotakNeo.getActiveSession();
     if (!session) {
       throw new KotakNeoApiError('Not connected to Kotak Neo. Please log in again.', 401);
     }
@@ -50,8 +53,8 @@ export class KotakNeoTradingService {
     return { Sid: session.sid, Auth: session.tradeToken, ...extra };
   }
 
-  async placeOrder(order: KotakNeoPlaceOrderRequest): Promise<KotakNeoOrderActionResult> {
-    const session = this.requireSession();
+  async placeOrder(kotakNeo: KotakNeoService, order: KotakNeoPlaceOrderRequest): Promise<KotakNeoOrderActionResult> {
+    const session = this.requireSession(kotakNeo);
     const body = {
       am: order.amo ?? 'NO',
       dq: order.disclosedQuantity ?? '0',
@@ -92,8 +95,8 @@ export class KotakNeoTradingService {
     }
   }
 
-  async modifyOrder(order: KotakNeoModifyOrderRequest): Promise<KotakNeoOrderActionResult> {
-    const session = this.requireSession();
+  async modifyOrder(kotakNeo: KotakNeoService, order: KotakNeoModifyOrderRequest): Promise<KotakNeoOrderActionResult> {
+    const session = this.requireSession(kotakNeo);
     const body = {
       no: order.orderId,
       tk: order.instrumentToken,
@@ -128,8 +131,8 @@ export class KotakNeoTradingService {
     }
   }
 
-  async cancelOrder(order: KotakNeoCancelOrderRequest): Promise<KotakNeoOrderActionResult> {
-    const session = this.requireSession();
+  async cancelOrder(kotakNeo: KotakNeoService, order: KotakNeoCancelOrderRequest): Promise<KotakNeoOrderActionResult> {
+    const session = this.requireSession(kotakNeo);
     const body = { on: order.orderId, am: order.amo ?? 'NO' };
 
     try {
@@ -146,8 +149,8 @@ export class KotakNeoTradingService {
     }
   }
 
-  async getOrderBook(): Promise<KotakNeoOrderBookEntry[]> {
-    const session = this.requireSession();
+  async getOrderBook(kotakNeo: KotakNeoService): Promise<KotakNeoOrderBookEntry[]> {
+    const session = this.requireSession(kotakNeo);
     try {
       const data = await requestWithRetry<{ data?: KotakNeoOrderBookEntry[] }>(this.http, {
         url: KOTAK_NEO_TRADING_ENDPOINTS.ORDER_BOOK,
@@ -162,8 +165,8 @@ export class KotakNeoTradingService {
     }
   }
 
-  async getTradeBook(): Promise<KotakNeoTradeBookEntry[]> {
-    const session = this.requireSession();
+  async getTradeBook(kotakNeo: KotakNeoService): Promise<KotakNeoTradeBookEntry[]> {
+    const session = this.requireSession(kotakNeo);
     try {
       const data = await requestWithRetry<{ data?: KotakNeoTradeBookEntry[] }>(this.http, {
         url: KOTAK_NEO_TRADING_ENDPOINTS.TRADE_BOOK,
@@ -178,8 +181,8 @@ export class KotakNeoTradingService {
     }
   }
 
-  async getPositions(): Promise<KotakNeoPositionEntry[]> {
-    const session = this.requireSession();
+  async getPositions(kotakNeo: KotakNeoService): Promise<KotakNeoPositionEntry[]> {
+    const session = this.requireSession(kotakNeo);
     try {
       const data = await requestWithRetry<{ data?: KotakNeoPositionEntry[] }>(this.http, {
         url: KOTAK_NEO_TRADING_ENDPOINTS.POSITIONS,
@@ -194,8 +197,8 @@ export class KotakNeoTradingService {
     }
   }
 
-  async getHoldings(): Promise<KotakNeoHoldingEntry[]> {
-    const session = this.requireSession();
+  async getHoldings(kotakNeo: KotakNeoService): Promise<KotakNeoHoldingEntry[]> {
+    const session = this.requireSession(kotakNeo);
     try {
       const data = await requestWithRetry<{ data?: KotakNeoHoldingEntry[] }>(this.http, {
         url: KOTAK_NEO_TRADING_ENDPOINTS.HOLDINGS,
@@ -210,8 +213,8 @@ export class KotakNeoTradingService {
     }
   }
 
-  async getFunds(filters: KotakNeoLimitsRequest = {}): Promise<KotakNeoFunds> {
-    const session = this.requireSession();
+  async getFunds(kotakNeo: KotakNeoService, filters: KotakNeoLimitsRequest = {}): Promise<KotakNeoFunds> {
+    const session = this.requireSession(kotakNeo);
     const body = {
       seg: filters.segment ?? 'ALL',
       exch: filters.exchange ?? 'ALL',

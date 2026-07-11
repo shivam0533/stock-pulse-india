@@ -47,11 +47,18 @@ function toSummary(session: KotakNeoSession): KotakNeoSessionSummary {
  * for exact file references), not guessed.
  *
  * The session — including the trade token, sid, and server id — lives only
- * in-memory in this singleton for the lifetime of the server process: never
+ * in-memory on this instance for the lifetime of the server process: never
  * written to disk, never logged, and never included in any response body
  * this service returns. The TOTP, MPIN, and consumer secret used to obtain
  * that session are local variables for the duration of login() only; they
  * are never assigned to any stored field.
+ *
+ * One instance per app user — see kotakNeoSessionRegistry.ts. This class
+ * used to be exported as a single shared singleton (`currentSession` for the
+ * entire process), which meant any authenticated user's trading calls
+ * silently ran against whichever Kotak Neo account most recently logged in.
+ * Construct via getOrCreateKotakNeoSession(userId), never `new
+ * KotakNeoService()` directly outside the registry.
  *
  * getActiveSession() is how KotakNeoTradingService integrates the session
  * automatically — every trading call reads it fresh, so a user is never
@@ -268,5 +275,3 @@ export class KotakNeoService {
     };
   }
 }
-
-export const kotakNeoService = new KotakNeoService();

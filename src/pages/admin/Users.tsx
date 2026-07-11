@@ -6,6 +6,7 @@ import { Card, Badge, Avatar } from '@components/ui';
 import { AdminPageHeader } from '@components/admin/AdminPageHeader';
 import { AdminSearchBar } from '@components/admin/AdminSearchBar';
 import { AdminPagination } from '@components/admin/AdminPagination';
+import { RoleBadge } from '@components/admin/RoleBadge';
 import { adminService, type ListUsersParams } from '@services/admin.service';
 import { formatDate } from '@utils/format';
 import { cn } from '@utils/cn';
@@ -163,9 +164,7 @@ export default function AdminUsers() {
                     </td>
                     <td className="px-4 py-3 text-center hidden lg:table-cell"><span className="text-2xs text-ink-400">Phase 2</span></td>
                     <td className="px-4 py-3 text-right hidden lg:table-cell"><span className="text-2xs text-ink-400">Phase 2</span></td>
-                    <td className="px-4 py-3 text-center">
-                      <Badge variant={u.role === 'admin' ? 'amber' : 'default'}>{u.role}</Badge>
-                    </td>
+                    <td className="px-4 py-3 text-center"><RoleBadge role={u.role} /></td>
                     <td className={cn('px-4 py-3 text-xs text-ink-300 whitespace-nowrap')}>{formatDate(u.joinedAt)}</td>
                   </motion.tr>
                 ))

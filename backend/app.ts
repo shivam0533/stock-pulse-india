@@ -9,6 +9,8 @@ import { authRoutes } from './auth/auth.routes';
 import { adminRoutes } from './admin/admin.routes';
 import { settingsRoutes } from './routes/settings.routes';
 import { userNotificationsRoutes } from './routes/notifications.routes';
+import { subscriptionRoutes } from './subscriptions/subscription.routes';
+import { adminSubscriptionRoutes } from './subscriptions/admin/adminSubscription.routes';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.middleware';
 
 // Wide-open cors() sent `Access-Control-Allow-Origin: *` to literally any
@@ -33,7 +35,10 @@ export function createApp(): Express {
       callback(null, !origin || ALLOWED_ORIGIN_PATTERN.test(origin));
     },
   }));
-  app.use(express.json());
+  // Default 100kb is fine for every route except the optional base64
+  // payment-screenshot upload (subscription.routes.ts) — the frontend
+  // downsizes the image client-side first, so 4mb is a ceiling, not the norm.
+  app.use(express.json({ limit: '4mb' }));
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
@@ -56,6 +61,10 @@ export function createApp(): Express {
   app.use('/api/auth', authRoutes);
   // Admin Panel surface — every route behind requireAuth + requireAdmin.
   app.use('/api/admin', adminRoutes);
+  // Trial/subscription: user-facing status + payment-request submission.
+  app.use('/api/subscription', subscriptionRoutes);
+  // Trial/subscription: admin review + activation surface.
+  app.use('/api/admin/subscriptions', adminSubscriptionRoutes);
   // Public (no auth) — main app polls this for maintenanceMode/tradingEnabled.
   app.use('/api/settings', settingsRoutes);
   // Any logged-in user's own admin-sent notifications (not admin-only).

@@ -55,9 +55,30 @@ interface AngelOneRawSession {
 export class AngelOneService implements IAngelOneService {
   private readonly http: AxiosInstance;
   private session: AngelOneRawSession | null = null;
+  // De-dups concurrent automatic-refresh attempts triggered by
+  // requireAccessToken() — without this, two requests for the same user
+  // landing near the expiry boundary (e.g. the Positions SSE poll and a
+  // placeOrder call) each independently see the session expired and each
+  // call refreshSession() with the same stored refreshToken. If Angel One
+  // rotates/invalidates the refresh token on first use, the second
+  // concurrent call fails and its catch block sets `this.session = null`,
+  // destroying the session the first (successful) call just installed —
+  // every subsequent call then 401s until re-login. A manual, explicit
+  // refresh via refreshSession() itself (the /refresh-session route) is
+  // unaffected — only this automatic path is deduped.
+  private refreshInFlight: Promise<AngelOneSession> | null = null;
 
   constructor() {
     this.http = axios.create({ baseURL: ANGEL_ONE_API_BASE_URL, timeout: 15000 });
+  }
+
+  private ensureFreshSessionOnce(): Promise<AngelOneSession> {
+    if (!this.refreshInFlight) {
+      this.refreshInFlight = this.refreshSession().finally(() => {
+        this.refreshInFlight = null;
+      });
+    }
+    return this.refreshInFlight;
   }
 
   /** Automatic session-refresh + 401 detection: called before every authenticated method below. */
@@ -68,7 +89,7 @@ export class AngelOneService implements IAngelOneService {
     if (Date.now() >= this.session.expiresAt) {
       // eslint-disable-next-line no-console
       console.log('[AngelOne] access token expired — refreshing automatically', { clientCode: this.session.clientCode });
-      await this.refreshSession();
+      await this.ensureFreshSessionOnce();
     }
     return this.session!.jwtToken;
   }
@@ -92,6 +113,11 @@ export class AngelOneService implements IAngelOneService {
       jwtToken: this.session.jwtToken,
       feedToken: this.session.feedToken,
     };
+  }
+
+  /** True only if this instance currently holds a live, unexpired session. */
+  hasSession(): boolean {
+    return !!this.session && Date.now() < this.session.expiresAt;
   }
 
   async login(credentials: AngelOneLoginRequest): Promise<AngelOneSession> {
@@ -473,14 +499,6 @@ export class AngelOneService implements IAngelOneService {
     return { success: true };
   }
 }
-
-/**
- * The one AngelOneService instance for the whole process — brokerManager.service.ts
- * uses this same singleton (not its own `new AngelOneService()`) so every
- * consumer (broker controllers AND the NIFTY market-data/WebSocket code)
- * shares one real session, never two independent ones.
- */
-export const angelOneService = new AngelOneService();
 
 function mapOrderStatus(raw: string | undefined): 'PENDING' | 'OPEN' | 'COMPLETE' | 'CANCELLED' | 'REJECTED' {
   const s = (raw ?? '').toLowerCase();

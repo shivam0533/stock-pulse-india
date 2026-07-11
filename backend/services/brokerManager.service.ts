@@ -1,5 +1,6 @@
 import type { IBrokerService } from '../brokers/IBrokerService';
-import { angelOneService, ANGEL_ONE_BROKER_ID } from '../brokers/angelOne';
+import { ANGEL_ONE_BROKER_ID } from '../brokers/angelOne';
+import { getOrCreateAngelOneSession } from '../brokers/angelOne/angelOneSessionRegistry';
 
 /**
  * Broker ids currently registered. Add to this union (and the registry
@@ -11,29 +12,22 @@ export type SupportedBrokerId = typeof ANGEL_ONE_BROKER_ID; // | 'ZERODHA' | 'UP
 const SUPPORTED_BROKER_IDS: SupportedBrokerId[] = [ANGEL_ONE_BROKER_ID];
 
 /**
- * Central registry resolving a broker id to its service implementation.
- * Consumers (controllers) depend only on the IBrokerService abstraction
- * returned here, never on a concrete class (Dependency Inversion).
+ * Central registry resolving a broker id to its service implementation —
+ * scoped to a specific app user (userId), never a shared/global instance,
+ * so one user's broker session can never be visible to another. Consumers
+ * (controllers) depend only on the IBrokerService abstraction returned
+ * here, never on a concrete class (Dependency Inversion).
  */
 export class BrokerManagerService {
-  private readonly registry: Record<SupportedBrokerId, IBrokerService>;
-
-  constructor() {
-    this.registry = {
-      [ANGEL_ONE_BROKER_ID]: angelOneService,
-    };
-  }
-
   isSupported(brokerId: string): brokerId is SupportedBrokerId {
     return SUPPORTED_BROKER_IDS.includes(brokerId as SupportedBrokerId);
   }
 
-  getBroker(brokerId: SupportedBrokerId): IBrokerService {
-    const broker = this.registry[brokerId];
-    if (!broker) {
-      throw new Error(`Unsupported broker: ${brokerId}`);
+  getBroker(brokerId: SupportedBrokerId, userId: string): IBrokerService {
+    if (brokerId === ANGEL_ONE_BROKER_ID) {
+      return getOrCreateAngelOneSession(userId);
     }
-    return broker;
+    throw new Error(`Unsupported broker: ${brokerId}`);
   }
 
   getSupportedBrokers(): SupportedBrokerId[] {

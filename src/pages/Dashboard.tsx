@@ -13,7 +13,13 @@ import { formatINR } from '@utils/format';
 
 export default function Dashboard() {
   const { user } = useAuthStore();
-  const { activeTrade, history, statsResetAt } = useOptionTradeStore();
+  // Individual selectors, not a destructured whole-store subscription —
+  // updateLTP fires every 500ms-2s while a trade is open (optionTrade.store.ts),
+  // which previously re-rendered this whole page + its child tree at that
+  // cadence for state fields most of them don't even read.
+  const activeTrade = useOptionTradeStore((s) => s.activeTrade);
+  const history = useOptionTradeStore((s) => s.history);
+  const statsResetAt = useOptionTradeStore((s) => s.statsResetAt);
 
   const greeting =
     new Date().getHours() < 12

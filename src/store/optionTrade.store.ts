@@ -138,6 +138,20 @@ function makeCompleted(
 // exit order on every tick while the first one is still in flight.
 let exitInFlight = false;
 
+// Re-entrancy guard for openTrade — the pre-existing "already have an open
+// trade" check above only reads `activeTrade`, which is only set *after*
+// the broker call resolves (a real order round-trip: hundreds of ms to
+// seconds). Two near-simultaneous calls (a manual Order Window click racing
+// Auto Trading's own tick, or two browser tabs open against the same
+// account) both pass that check while activeTrade is still null, and both
+// place a real broker order — only the second call's post-await re-check
+// catches it, after the order has already been sent. This flag closes that
+// window: set synchronously before the broker call (no `await` between the
+// check and the set, so no other call can interleave), checked at the top
+// so a second concurrent call returns immediately instead of ever reaching
+// the broker.
+let openInFlight = false;
+
 export const useOptionTradeStore = create<OptionTradeState>()(
   persist(
     (set, get) => {
@@ -288,6 +302,11 @@ export const useOptionTradeStore = create<OptionTradeState>()(
           return false;
         }
 
+        if (openInFlight) {
+          set({ tradeError: 'An order is already being placed. Please wait.' });
+          return false;
+        }
+
         if (!isValidLots(params.lots)) {
           set({ tradeError: 'Select at least 1 lot to place an order.' });
           return false;
@@ -343,70 +362,78 @@ export const useOptionTradeStore = create<OptionTradeState>()(
           triggerPrice: params.triggerPrice,
         };
 
-        let filledPrice: number;
-        let id: string;
+        // Set synchronously — no `await` between the checks above and this,
+        // so no other call can interleave between "not in flight" and "now
+        // it is". Cleared in the `finally` below on every exit path.
+        openInFlight = true;
         try {
-          // "Paper Trading Only" forces the paper adapter regardless of the
-          // app-wide active broker, so Option Chain trades never route to a
-          // live broker unless this toggle is explicitly turned off.
-          const result = risk.paperTradingOnly
-            ? await paperBrokerAdapter.placeOrder(orderReq)
-            : await placeOptionOrder(orderReq);
-          filledPrice = result.filledPrice;
-          id = result.brokerOrderId;
-        } catch (err) {
-          const message = (err as Error).message;
-          set({ tradeError: message });
-          useOptionChainToastStore.getState().push('rejected', `Order Rejected — ${message}`);
-          return false;
+          let filledPrice: number;
+          let id: string;
+          try {
+            // "Paper Trading Only" forces the paper adapter regardless of the
+            // app-wide active broker, so Option Chain trades never route to a
+            // live broker unless this toggle is explicitly turned off.
+            const result = risk.paperTradingOnly
+              ? await paperBrokerAdapter.placeOrder(orderReq)
+              : await placeOptionOrder(orderReq);
+            filledPrice = result.filledPrice;
+            id = result.brokerOrderId;
+          } catch (err) {
+            const message = (err as Error).message;
+            set({ tradeError: message });
+            useOptionChainToastStore.getState().push('rejected', `Order Rejected — ${message}`);
+            return false;
+          }
+
+          // Re-check — an await above means another call could have opened a
+          // trade in the meantime (e.g. a near-simultaneous manual + auto-trade click).
+          if (get().activeTrade?.status === 'OPEN') {
+            set({ tradeError: 'You already have an active open trade. Exit it before opening a new position.' });
+            return false;
+          }
+
+          const lossPercent   = risk.maxLossPercent;
+          const profitPercent = risk.maxProfitPercent;
+          const investment = +(filledPrice * quantity).toFixed(2);
+
+          const trade: ActiveOptionTrade = {
+            id,
+            strike: params.strike,
+            side: params.side,
+            expiry: params.expiry,
+            expiryRaw: params.expiryRaw,
+            entryPrice: filledPrice,
+            currentLTP: filledPrice,
+            stopLoss: +(filledPrice * (1 - lossPercent / 100)).toFixed(2),
+            target:    +(filledPrice * (1 + profitPercent / 100)).toFixed(2),
+            lossPercent,
+            profitPercent,
+            autoExitEnabled: risk.applyAutomatically,
+            orderType,
+            productType,
+            triggerPrice: params.triggerPrice,
+            lotSize,
+            lots: params.lots,
+            quantity,
+            investment,
+            maxLossAmount: +(investment * lossPercent / 100).toFixed(2),
+            maxProfitAmount: +(investment * profitPercent / 100).toFixed(2),
+            status: 'OPEN',
+            entryTime: Date.now(),
+            exitTime: null,
+          };
+
+          set({ tradeError: null, activeTrade: trade });
+          useOptionChainToastStore.getState().push('opened', `Trade Opened — ${tradeLabel(trade)} × ${quantity} (Order ID: ${trade.id})`);
+          logTransition('openTrade', {
+            id: trade.id, strike: trade.strike, side: trade.side,
+            entryPrice: trade.entryPrice, stopLoss: trade.stopLoss, target: trade.target,
+            autoExitEnabled: trade.autoExitEnabled, status: trade.status,
+          });
+          return true;
+        } finally {
+          openInFlight = false;
         }
-
-        // Re-check — an await above means another call could have opened a
-        // trade in the meantime (e.g. a near-simultaneous manual + auto-trade click).
-        if (get().activeTrade?.status === 'OPEN') {
-          set({ tradeError: 'You already have an active open trade. Exit it before opening a new position.' });
-          return false;
-        }
-
-        const lossPercent   = risk.maxLossPercent;
-        const profitPercent = risk.maxProfitPercent;
-        const investment = +(filledPrice * quantity).toFixed(2);
-
-        const trade: ActiveOptionTrade = {
-          id,
-          strike: params.strike,
-          side: params.side,
-          expiry: params.expiry,
-          expiryRaw: params.expiryRaw,
-          entryPrice: filledPrice,
-          currentLTP: filledPrice,
-          stopLoss: +(filledPrice * (1 - lossPercent / 100)).toFixed(2),
-          target:    +(filledPrice * (1 + profitPercent / 100)).toFixed(2),
-          lossPercent,
-          profitPercent,
-          autoExitEnabled: risk.applyAutomatically,
-          orderType,
-          productType,
-          triggerPrice: params.triggerPrice,
-          lotSize,
-          lots: params.lots,
-          quantity,
-          investment,
-          maxLossAmount: +(investment * lossPercent / 100).toFixed(2),
-          maxProfitAmount: +(investment * profitPercent / 100).toFixed(2),
-          status: 'OPEN',
-          entryTime: Date.now(),
-          exitTime: null,
-        };
-
-        set({ tradeError: null, activeTrade: trade });
-        useOptionChainToastStore.getState().push('opened', `Trade Opened — ${tradeLabel(trade)} × ${quantity} (Order ID: ${trade.id})`);
-        logTransition('openTrade', {
-          id: trade.id, strike: trade.strike, side: trade.side,
-          entryPrice: trade.entryPrice, stopLoss: trade.stopLoss, target: trade.target,
-          autoExitEnabled: trade.autoExitEnabled, status: trade.status,
-        });
-        return true;
       },
 
       updateLTP: (ltp) => {

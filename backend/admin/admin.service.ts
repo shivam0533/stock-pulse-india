@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { pool } from '../db/pool';
+import { AdminApiError } from './admin.errors';
 import { getPublicSettings, setSetting, APP_SETTING_KEYS } from '../services/appSettings.service';
 import type {
   AdminUserSummary, AdminDashboardStats, LoginLogEntry, AdminLogEntry, AdminNotificationEntry, NotificationType,
@@ -23,7 +24,7 @@ const USER_SORT_COLUMNS: Record<string, string> = {
 interface UserRow {
   id: string; name: string; email: string; phone: string | null;
   kyc_status: 'pending' | 'verified' | 'rejected'; pan_verified: boolean;
-  role: 'user' | 'admin'; joined_at: string;
+  role: 'user' | 'admin' | 'super_admin'; joined_at: string;
 }
 
 function toUserSummary(row: UserRow): AdminUserSummary {
@@ -97,6 +98,37 @@ class AdminService {
       [id],
     );
     return result.rows[0] ? toUserSummary(result.rows[0]) : null;
+  }
+
+  private async countSuperAdmins(): Promise<number> {
+    const result = await pool.query<{ count: string }>(`SELECT COUNT(*) FROM users WHERE role = 'super_admin'`);
+    return Number(result.rows[0].count);
+  }
+
+  /**
+   * SUPER_ADMIN-only "manage admins" capability. Two safeguards beyond the
+   * route-level requireSuperAdmin check:
+   *  - can't change your own role (no accidental self-lockout)
+   *  - can't demote the last remaining super_admin (would leave nobody able
+   *    to manage roles/settings at all — there is no other way back in
+   *    short of a manual SQL update)
+   */
+  async updateUserRole(targetUserId: string, newRole: 'user' | 'admin' | 'super_admin', actingUserId: string): Promise<AdminUserSummary> {
+    if (targetUserId === actingUserId) {
+      throw new AdminApiError('You cannot change your own role.', 400);
+    }
+    const target = await this.getUserById(targetUserId);
+    if (!target) {
+      throw new AdminApiError('User not found.', 404);
+    }
+    if (target.role === 'super_admin' && newRole !== 'super_admin' && (await this.countSuperAdmins()) <= 1) {
+      throw new AdminApiError('Cannot remove the last remaining super admin.', 400);
+    }
+    const result = await pool.query<UserRow>(
+      'UPDATE users SET role = $1 WHERE id = $2 RETURNING id, name, email, phone, kyc_status, pan_verified, role, joined_at',
+      [newRole, targetUserId],
+    );
+    return toUserSummary(result.rows[0]);
   }
 
   async listLoginLogs(opts: { page: number; pageSize: number }): Promise<Paginated<LoginLogEntry>> {

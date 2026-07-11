@@ -1,17 +1,88 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, User as UserIcon } from 'lucide-react';
-import { Card, Badge, Avatar } from '@components/ui';
+import { ArrowLeft, Check, ShieldCheck, User as UserIcon } from 'lucide-react';
+import { Card, Badge, Avatar, Button } from '@components/ui';
 import { AdminPageHeader } from '@components/admin/AdminPageHeader';
+import { RoleBadge } from '@components/admin/RoleBadge';
 import { adminService } from '@services/admin.service';
+import { useAuthStore } from '@store/auth.store';
 import { formatDate } from '@utils/format';
-import type { AdminUserSummary } from '@/types';
+import type { AdminUserSummary, UserRole } from '@/types';
 
 const PHASE_2_FIELDS = [
   'Current Margin', 'Available Margin', "Today's P&L", 'Overall P&L', "Today's Trades",
   'Trade History', 'Open Positions', 'Risk Settings', 'Auto Trading Status',
   'Login History', 'Recent Activity', 'Device Information', 'IP Address',
 ];
+
+const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
+  { value: 'user', label: 'User' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'super_admin', label: 'Super Admin' },
+];
+
+function ManageRoleCard({ user, onRoleChanged }: { user: AdminUserSummary; onRoleChanged: (u: AdminUserSummary) => void }) {
+  const viewer = useAuthStore((s) => s.user);
+  const [draftRole, setDraftRole] = useState<UserRole>(user.role);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // SUPER_ADMIN-only capability ("manage admins") — server-enforced by
+  // requireSuperAdmin regardless of what this check does; this is purely
+  // so a plain ADMIN never sees a control they'd get a 403 from anyway.
+  if (viewer?.role !== 'super_admin') return null;
+
+  const isSelf = viewer.id === user.id;
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await adminService.updateUserRole(user.id, draftRole);
+      onRoleChanged(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1800);
+    } catch (err) {
+      setError((err as { message?: string }).message ?? 'Failed to update role');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="p-5 space-y-3">
+      <h3 className="font-display text-sm font-semibold text-ink-50 flex items-center gap-1.5">
+        <ShieldCheck size={15} className="text-brand-300" /> Manage Role
+      </h3>
+      {isSelf ? (
+        <p className="text-xs text-ink-300">You can't change your own role — ask another Super Admin.</p>
+      ) : (
+        <>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={draftRole}
+              onChange={(e) => setDraftRole(e.target.value as UserRole)}
+              className="bg-ink-800 border border-ink-600 rounded-xl h-10 px-3 text-sm text-ink-50 outline-none focus:border-brand-400 transition-colors"
+            >
+              {ROLE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+            </select>
+            <Button
+              onClick={handleSave}
+              loading={saving}
+              disabled={draftRole === user.role}
+              leftIcon={saved ? <Check size={15} /> : undefined}
+              size="sm"
+            >
+              {saved ? 'Updated' : 'Update Role'}
+            </Button>
+          </div>
+          {error && <p className="text-xs text-loss">{error}</p>}
+        </>
+      )}
+    </Card>
+  );
+}
 
 export default function AdminUserDetail() {
   const { id } = useParams<{ id: string }>();
@@ -48,7 +119,7 @@ export default function AdminUserDetail() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="font-display text-lg font-semibold text-ink-50">{user.name}</h2>
-                  <Badge variant={user.role === 'admin' ? 'amber' : 'default'}>{user.role}</Badge>
+                  <RoleBadge role={user.role} />
                   <Badge variant={user.kycStatus === 'verified' ? 'gain' : user.kycStatus === 'rejected' ? 'loss' : 'neutral'}>
                     KYC: {user.kycStatus}
                   </Badge>
@@ -75,6 +146,8 @@ export default function AdminUserDetail() {
               </div>
             </div>
           </Card>
+
+          <ManageRoleCard user={user} onRoleChanged={setUser} />
 
           <Card className="p-5">
             <h3 className="font-display text-sm font-semibold text-ink-50 mb-1">Coming soon (Phase 2)</h3>

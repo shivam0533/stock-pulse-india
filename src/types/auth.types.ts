@@ -1,4 +1,6 @@
-export type UserRole = 'user' | 'admin';
+export type UserRole = 'user' | 'admin' | 'super_admin';
+
+export type SubscriptionStatus = 'TRIAL' | 'ACTIVE' | 'EXPIRED' | 'CANCELLED';
 
 export interface User {
   id: string;
@@ -11,6 +13,10 @@ export interface User {
   joinedAt: number;
   preferences: UserPreferences;
   role: UserRole;
+  subscriptionStatus: SubscriptionStatus;
+  trialEndDate: number | null;
+  subscriptionEndDate: number | null;
+  isTradingLocked: boolean;
 }
 
 export interface UserPreferences {

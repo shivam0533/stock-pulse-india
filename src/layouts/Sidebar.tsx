@@ -19,6 +19,7 @@ import {
   ScrollText,
   Bell,
   ShieldCheck,
+  CreditCard,
 } from 'lucide-react';
 import { Logo } from '@components/common/Logo';
 import { useUIStore } from '@store/ui.store';
@@ -36,10 +37,11 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Performance', path: ROUTES.PERFORMANCE, icon: BarChart3 },
   { label: 'Settings', path: ROUTES.SETTINGS, icon: Settings },
   { label: 'Broker Integration', path: ROUTES.BROKER_INTEGRATION, icon: Plug },
+  { label: 'Subscription', path: ROUTES.SUBSCRIPTION, icon: CreditCard },
   { label: 'Profile', path: ROUTES.PROFILE, icon: User },
 ];
 
-/** Only rendered for user.role === 'admin' — see the "Admin" section below. */
+/** Rendered for role === 'admin' OR 'super_admin' — see the "Admin" section below. */
 const ADMIN_NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', path: ROUTES.ADMIN_DASHBOARD, icon: LayoutDashboard },
   { label: 'Users', path: ROUTES.ADMIN_USERS, icon: UsersIcon },
@@ -47,14 +49,21 @@ const ADMIN_NAV_ITEMS: NavItem[] = [
   { label: 'Live Activity', path: ROUTES.ADMIN_LIVE_ACTIVITY, icon: Radio },
   { label: 'Analytics', path: ROUTES.ADMIN_ANALYTICS, icon: BarChart3 },
   { label: 'Notifications', path: ROUTES.ADMIN_NOTIFICATIONS, icon: Bell },
+  { label: 'Subscriptions', path: ROUTES.ADMIN_SUBSCRIPTIONS, icon: CreditCard },
   { label: 'Support', path: ROUTES.ADMIN_SUPPORT, icon: LifeBuoy },
   { label: 'Logs', path: ROUTES.ADMIN_LOGS, icon: ScrollText },
+];
+
+/** SUPER_ADMIN only — "manage settings" is not part of plain ADMIN's permission set. */
+const SUPER_ADMIN_NAV_ITEMS: NavItem[] = [
   { label: 'Settings', path: ROUTES.ADMIN_SETTINGS, icon: ShieldCheck },
 ];
 
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, mobileSidebarOpen, closeMobileSidebar } = useUIStore();
-  const isAdmin = useAuthStore((s) => s.user?.role === 'admin');
+  const role = useAuthStore((s) => s.user?.role);
+  const isAdmin = role === 'admin' || role === 'super_admin';
+  const isSuperAdmin = role === 'super_admin';
   // Must match this component's own Tailwind `lg:` classes (lg:sticky,
   // lg:z-30, lg:pointer-events-auto, the overlay's lg:hidden) exactly —
   // see useIsBelowLg's doc comment for why useIsMobile()'s 768px threshold
@@ -191,7 +200,7 @@ export function Sidebar() {
                   <div className="px-3 pb-2 text-2xs text-ink-300 uppercase tracking-wide">Admin</div>
                 )}
               </div>
-              {ADMIN_NAV_ITEMS.map((item) => (
+              {[...ADMIN_NAV_ITEMS, ...(isSuperAdmin ? SUPER_ADMIN_NAV_ITEMS : [])].map((item) => (
                 <NavLink
                   key={item.path}
                   to={item.path}

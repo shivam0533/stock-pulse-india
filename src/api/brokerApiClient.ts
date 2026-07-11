@@ -1,6 +1,8 @@
 import axios from 'axios';
 import { useBrokerConnectionStore } from '@store/brokerConnection.store';
 import { useBrokerToastStore } from '@store/brokerToast.store';
+import { storage } from '@utils/storage';
+import { STORAGE_KEYS } from '@utils/constants';
 
 /**
  * Dedicated HTTP client for the real broker-integration backend (backend/).
@@ -24,6 +26,27 @@ export const brokerApiClient = axios.create({
     Accept: 'application/json',
   },
 });
+
+/**
+ * The backend's broker/nifty routes now require this app's own login
+ * (requireAuth) — previously this client sent no identifying header at
+ * all, which is exactly how one global backend session used to serve
+ * every browser regardless of who was asking. Mirrors the identical
+ * interceptor already on `src/api/client.ts`.
+ */
+brokerApiClient.interceptors.request.use((config) => {
+  const token = storage.get<string | null>(STORAGE_KEYS.AUTH_TOKEN, null);
+  if (token && config.headers) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+/** Same token, as a query param — for EventSource connections, which can't set custom headers. The backend's requireAuth already accepts this as a fallback specifically for that reason. */
+export function authTokenQueryParam(): string {
+  const token = storage.get<string | null>(STORAGE_KEYS.AUTH_TOKEN, null);
+  return token ? `token=${encodeURIComponent(token)}` : '';
+}
 
 /**
  * The backend's Angel One session lives only in server memory

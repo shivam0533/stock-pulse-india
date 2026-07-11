@@ -47,19 +47,26 @@ export function isAngelOneConfigured(): boolean {
   return !!angelOneConfig.apiKey;
 }
 
+function parseEmailList(raw: string | undefined): Set<string> {
+  return new Set(
+    (raw ?? '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
 /**
- * Comma-separated emails (case-insensitive) that get role='admin' the
- * moment they sign up or log in for real — the no-manual-SQL way to bootstrap
- * the first admin account for the Admin Panel. Everyone else defaults to
- * role='user'. Re-checked on every login too, so adding/removing an email
- * here takes effect without touching the database directly.
+ * Comma-separated emails (case-insensitive) that get role='super_admin' /
+ * role='admin' the moment they sign up or log in for real — the
+ * no-manual-SQL way to bootstrap the initial RBAC accounts. Everyone else
+ * defaults to role='user'. Re-checked on every login too, so adding an
+ * email here takes effect without touching the database directly — but
+ * never auto-demotes (see auth.service.ts), so removing an email later
+ * doesn't silently revoke an existing admin/super_admin.
  */
-export const adminEmails = new Set(
-  (process.env.ADMIN_EMAILS ?? '')
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean),
-);
+export const superAdminEmails = parseEmailList(process.env.SUPER_ADMIN_EMAILS);
+export const adminEmails = parseEmailList(process.env.ADMIN_EMAILS);
 
 function maskKey(key: string): string {
   if (!key) return '(empty)';

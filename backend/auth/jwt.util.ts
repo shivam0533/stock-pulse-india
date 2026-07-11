@@ -10,7 +10,7 @@ export function isJwtConfigured(): boolean {
 export interface AppTokenPayload {
   sub: string; // user id
   email: string;
-  role: 'user' | 'admin';
+  role: 'user' | 'admin' | 'super_admin';
 }
 
 export function signToken(payload: AppTokenPayload): string {

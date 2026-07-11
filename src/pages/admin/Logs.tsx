@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollText } from 'lucide-react';
 import { Card, Badge } from '@components/ui';
 import { AdminPageHeader } from '@components/admin/AdminPageHeader';
@@ -27,12 +27,22 @@ function AuthLogsTable() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  // Guards against an earlier, slower page's response overwriting a later,
+  // faster one's (rapid page-click) — same pattern as Users.tsx/Subscriptions.tsx.
+  const requestTokenRef = useRef(0);
 
   useEffect(() => {
     setError(null);
+    const token = ++requestTokenRef.current;
     adminService.listLoginLogs(page, PAGE_SIZE)
-      .then((res) => { setItems(res.items); setTotal(res.total); })
-      .catch((err) => setError(err.message ?? 'Failed to load authentication logs'));
+      .then((res) => {
+        if (requestTokenRef.current !== token) return;
+        setItems(res.items); setTotal(res.total);
+      })
+      .catch((err) => {
+        if (requestTokenRef.current !== token) return;
+        setError(err.message ?? 'Failed to load authentication logs');
+      });
   }, [page]);
 
   return (
@@ -77,12 +87,20 @@ function AdminActionsTable() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const requestTokenRef = useRef(0);
 
   useEffect(() => {
     setError(null);
+    const token = ++requestTokenRef.current;
     adminService.listAdminLogs(page, PAGE_SIZE)
-      .then((res) => { setItems(res.items); setTotal(res.total); })
-      .catch((err) => setError(err.message ?? 'Failed to load admin actions'));
+      .then((res) => {
+        if (requestTokenRef.current !== token) return;
+        setItems(res.items); setTotal(res.total);
+      })
+      .catch((err) => {
+        if (requestTokenRef.current !== token) return;
+        setError(err.message ?? 'Failed to load admin actions');
+      });
   }, [page]);
 
   return (

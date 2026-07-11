@@ -1,4 +1,4 @@
-import { brokerApiClient, toBrokerApiError, apiOrigin } from '@api/brokerApiClient';
+import { brokerApiClient, toBrokerApiError, apiOrigin, authTokenQueryParam } from '@api/brokerApiClient';
 import type { OptionChainData, OptionExpiry, OptionStrike, OptionGreeks } from '@/types';
 
 /**
@@ -129,7 +129,7 @@ export function subscribeToLivePositions(onSnapshot: (positions: NiftyPosition[]
   let stopped = false;
 
   const connect = () => {
-    source = new EventSource(`${apiOrigin()}/api/nifty/positions/stream`);
+    source = new EventSource(`${apiOrigin()}/api/nifty/positions/stream?${authTokenQueryParam()}`);
     source.onmessage = (event) => {
       try {
         onSnapshot(JSON.parse(event.data) as NiftyPosition[]);

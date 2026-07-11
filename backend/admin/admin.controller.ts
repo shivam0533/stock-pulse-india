@@ -1,16 +1,23 @@
 import type { Request, Response } from 'express';
 import { adminService } from './admin.service';
+import { AdminApiError } from './admin.errors';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 import type { NotificationType } from './admin.types';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const VALID_ROLES = ['user', 'admin', 'super_admin'] as const;
 
 /**
- * Never forwards a raw thrown error's message to the client — a Postgres
- * error (e.g. "invalid input syntax for type uuid") is an internal detail,
- * not something an API consumer should see. Logged server-side instead.
+ * AdminApiError carries a deliberately curated, safe-to-show message (e.g.
+ * "you can't demote yourself") — passed through as-is. Anything else (e.g.
+ * a raw Postgres error) is an internal detail, not something an API
+ * consumer should see; logged server-side instead.
  */
 function handleError(res: Response, err: unknown): void {
+  if (err instanceof AdminApiError) {
+    sendError(res, err.message, err.statusCode);
+    return;
+  }
   // eslint-disable-next-line no-console
   console.error('[Admin API] error:', err);
   sendError(res, 'Something went wrong. Please try again.', 500);
@@ -62,6 +69,25 @@ export const adminController = {
         return;
       }
       sendSuccess(res, user);
+    } catch (err) {
+      handleError(res, err);
+    }
+  },
+
+  async updateUserRole(req: Request, res: Response): Promise<void> {
+    try {
+      if (!UUID_PATTERN.test(req.params.id)) {
+        sendError(res, 'Invalid user id.', 400);
+        return;
+      }
+      const { role } = req.body ?? {};
+      if (!VALID_ROLES.includes(role)) {
+        sendError(res, `Invalid role. Use one of: ${VALID_ROLES.join(', ')}.`, 400);
+        return;
+      }
+      const updated = await adminService.updateUserRole(req.params.id, role, req.userId!);
+      await adminService.logAction(req.userId!, 'user.role_change', req.params.id, { newRole: role });
+      sendSuccess(res, updated);
     } catch (err) {
       handleError(res, err);
     }

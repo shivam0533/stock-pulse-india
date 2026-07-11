@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { pool } from '../db/pool';
 import { signToken } from './jwt.util';
-import { adminEmails } from '../config/env';
-import type { AppUser, AppUserRole, AuthResponse, LoginInput, SignupInput, UserPreferences } from './auth.types';
+import { superAdminEmails, adminEmails } from '../config/env';
+import { isTradingLocked } from '../subscriptions/access.util';
+import type { AppSubscriptionStatus, AppUser, AppUserRole, AuthResponse, LoginInput, SignupInput, UserPreferences } from './auth.types';
 
 export class AuthApiError extends Error {
   constructor(message: string, public readonly statusCode: number) {
@@ -31,14 +32,31 @@ interface UserRow {
   preferences: UserPreferences;
   joined_at: string;
   role: AppUserRole;
+  subscription_status: AppSubscriptionStatus;
+  trial_end_date: string | null;
+  subscription_end_date: string | null;
 }
+
+const TRIAL_DURATION_MS = 2 * 24 * 60 * 60 * 1000;
 
 interface RequestContext {
   ipAddress?: string;
   userAgent?: string;
 }
 
+/** Rank used only to decide whether a bootstrap-list match is a *promotion* — never used to demote. */
+const ROLE_RANK: Record<AppUserRole, number> = { user: 0, admin: 1, super_admin: 2 };
+
+/** SUPER_ADMIN_EMAILS takes priority over ADMIN_EMAILS if an email somehow ends up in both. */
+function resolveBootstrapRole(email: string): AppUserRole {
+  if (superAdminEmails.has(email)) return 'super_admin';
+  if (adminEmails.has(email)) return 'admin';
+  return 'user';
+}
+
 function toAppUser(row: UserRow): AppUser {
+  const trialEndDate = row.trial_end_date ? new Date(row.trial_end_date).getTime() : null;
+  const subscriptionEndDate = row.subscription_end_date ? new Date(row.subscription_end_date).getTime() : null;
   return {
     id: row.id,
     name: row.name,
@@ -49,6 +67,15 @@ function toAppUser(row: UserRow): AppUser {
     joinedAt: new Date(row.joined_at).getTime(),
     preferences: row.preferences,
     role: row.role,
+    subscriptionStatus: row.subscription_status,
+    trialEndDate,
+    subscriptionEndDate,
+    isTradingLocked: isTradingLocked({
+      role: row.role,
+      subscriptionStatus: row.subscription_status,
+      trialEndDate,
+      subscriptionEndDate,
+    }),
   };
 }
 
@@ -80,12 +107,14 @@ class AuthService {
 
     const passwordHash = await bcrypt.hash(input.password, 10);
     const id = randomUUID();
-    const role: AppUserRole = adminEmails.has(email) ? 'admin' : 'user';
+    const role: AppUserRole = resolveBootstrapRole(email);
+    const trialStart = new Date();
+    const trialEnd = new Date(trialStart.getTime() + TRIAL_DURATION_MS);
     const result = await pool.query<UserRow>(
-      `INSERT INTO users (id, name, email, phone, password_hash, preferences, role)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO users (id, name, email, phone, password_hash, preferences, role, trial_start_date, trial_end_date, subscription_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'TRIAL')
        RETURNING *`,
-      [id, input.name.trim(), email, input.phone?.trim() || null, passwordHash, JSON.stringify(DEFAULT_PREFERENCES), role],
+      [id, input.name.trim(), email, input.phone?.trim() || null, passwordHash, JSON.stringify(DEFAULT_PREFERENCES), role, trialStart, trialEnd],
     );
 
     const user = toAppUser(result.rows[0]);
@@ -112,12 +141,16 @@ class AuthService {
       throw new AuthApiError('Invalid email or password.', 401);
     }
 
-    // Promote to admin on login if this email was added to ADMIN_EMAILS
-    // after the account was created — never auto-demotes, so removing an
-    // email from the list doesn't silently revoke an existing admin.
-    if (adminEmails.has(email) && row.role !== 'admin') {
-      await pool.query('UPDATE users SET role = $1 WHERE id = $2', ['admin', row.id]);
-      row.role = 'admin';
+    // Promote on login if this email was added to SUPER_ADMIN_EMAILS/
+    // ADMIN_EMAILS after the account was created — never auto-demotes
+    // (only ever moves up ROLE_RANK), so removing an email from either
+    // list later doesn't silently revoke an existing admin/super_admin,
+    // and an existing super_admin can never be knocked down to admin just
+    // because their email happens to also be in ADMIN_EMAILS.
+    const bootstrapRole = resolveBootstrapRole(email);
+    if (ROLE_RANK[bootstrapRole] > ROLE_RANK[row.role]) {
+      await pool.query('UPDATE users SET role = $1 WHERE id = $2', [bootstrapRole, row.id]);
+      row.role = bootstrapRole;
     }
 
     await this.recordLoginAttempt(email, row.id, true, ctx);

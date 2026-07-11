@@ -29,6 +29,8 @@ export interface IBrokerService<
   login(credentials: TLoginRequest): Promise<TSession>;
   logout(): Promise<{ success: boolean }>;
   refreshSession(): Promise<TSession>;
+  /** True only if this specific instance currently holds a live, unexpired session — used to gate requests per-user instead of assuming a global "connected" state. */
+  hasSession(): boolean;
 
   getProfile(): Promise<TProfile>;
   getFunds(): Promise<TFunds>;

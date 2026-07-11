@@ -25,6 +25,10 @@ const MOCK_USER: User = {
   kycStatus: 'verified',
   role: 'user',
   joinedAt: Date.now() - 1000 * 60 * 60 * 24 * 180,
+  subscriptionStatus: 'ACTIVE',
+  trialEndDate: null,
+  subscriptionEndDate: Date.now() + 1000 * 60 * 60 * 24 * 30,
+  isTradingLocked: false,
   preferences: {
     defaultExchange: 'NSE',
     notifications: {

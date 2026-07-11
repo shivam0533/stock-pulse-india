@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import WebSocket from 'ws';
 import { Parser } from 'binary-parser';
-import { angelOneService } from '../brokers/angelOne/angelOne.service';
+import { getAnyLiveAngelOneSession } from '../brokers/angelOne/angelOneSessionRegistry';
 import { angelOneConfig } from '../config/env';
 import {
   ANGEL_ONE_WS_URL,
@@ -82,7 +82,8 @@ interface SnapQuoteFrame {
   best_5_sell_data: Array<{ price: number }>;
 }
 
-const RECONNECT_DELAY_MS = 3000;
+const RECONNECT_BASE_DELAY_MS = 3000;
+const RECONNECT_MAX_DELAY_MS = 60_000;
 
 export class AngelOneWebSocketService extends EventEmitter {
   private ws: WebSocket | null = null;
@@ -96,6 +97,8 @@ export class AngelOneWebSocketService extends EventEmitter {
   // not `subscribedTokens` (see connect() for why that distinction matters).
   private pendingNfoTokens: Set<string> = new Set();
   private pendingNseTokens: Set<string> = new Set();
+  /** Consecutive failed-connection count — drives exponential backoff so a prolonged Angel One-side outage doesn't hammer their API every few seconds forever. Reset to 0 on a successful open. */
+  private reconnectAttempts = 0;
 
   getTick(token: string): NiftyLiveTick | undefined {
     return this.ticks.get(token);
@@ -107,8 +110,12 @@ export class AngelOneWebSocketService extends EventEmitter {
 
   /** Ensures a live connection exists for the current Angel One session, then subscribes to the given tokens (idempotent — already-subscribed tokens are skipped). */
   ensureSubscribed(nfoTokens: string[], nseTokens: string[] = []): void {
-    const creds = angelOneService.getMarketFeedCredentials();
-    if (!creds) return; // not connected — nothing to stream yet
+    // Any one currently-live user's session — this is shared, public market
+    // data (NIFTY/option LTP), not user-specific, so any valid feed token
+    // can authenticate the one upstream connection every user's browser
+    // reads from.
+    const creds = getAnyLiveAngelOneSession()?.getMarketFeedCredentials() ?? null;
+    if (!creds) return; // nobody connected yet — nothing to stream
 
     // Fix: previously, on the very first call (WS not connected yet), this
     // method called connect() and returned WITHOUT recording nfoTokens/
@@ -128,7 +135,7 @@ export class AngelOneWebSocketService extends EventEmitter {
   }
 
   private connect(): void {
-    const creds = angelOneService.getMarketFeedCredentials();
+    const creds = getAnyLiveAngelOneSession()?.getMarketFeedCredentials() ?? null;
     if (!creds) return;
 
     this.teardown();
@@ -155,6 +162,7 @@ export class AngelOneWebSocketService extends EventEmitter {
       // Stage: WebSocket Connected
       // eslint-disable-next-line no-console
       console.log('[Pipeline] WebSocket Connected');
+      this.reconnectAttempts = 0; // back to full speed after a successful connect
       this.pingInterval = setInterval(() => this.ws?.send(ANGEL_ONE_WS_PING_MESSAGE), ANGEL_ONE_WS_PING_INTERVAL_MS);
       // Subscribe to everything ever requested (this connection's first
       // caller included) — using pendingNfoTokens/pendingNseTokens, not
@@ -190,10 +198,15 @@ export class AngelOneWebSocketService extends EventEmitter {
     });
 
     this.ws.on('close', () => {
+      const delay = Math.min(
+        RECONNECT_BASE_DELAY_MS * 2 ** this.reconnectAttempts,
+        RECONNECT_MAX_DELAY_MS,
+      );
+      this.reconnectAttempts += 1;
       // eslint-disable-next-line no-console
-      console.log('[AngelOneWS] disconnected — reconnecting shortly');
+      console.log(`[AngelOneWS] disconnected — reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
       this.teardown();
-      this.reconnectTimeout = setTimeout(() => this.connect(), RECONNECT_DELAY_MS);
+      this.reconnectTimeout = setTimeout(() => this.connect(), delay);
     });
   }
 
@@ -259,6 +272,16 @@ export class AngelOneWebSocketService extends EventEmitter {
     if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
     this.pingInterval = null;
     this.reconnectTimeout = null;
+    // Bug fix: this used to only be cleared in disconnect() (explicit
+    // logout), never here — so after ANY reconnect (network blip, Angel
+    // One idle timeout, routine on Railway), sendSubscribe()'s "already
+    // subscribed" filter treated every previously-known token as already
+    // subscribed on the brand-new socket and never resent the subscribe
+    // request. Ticks for every token requested before the first reconnect
+    // of the process's life went permanently dark, silently. Clearing it
+    // here means the next `open` handler's sendSubscribe() call correctly
+    // treats everything in pendingNfoTokens/pendingNseTokens as new again.
+    this.subscribedTokens.clear();
     if (this.ws) {
       this.ws.removeAllListeners();
       // Closing a socket that never finished connecting makes the `ws`

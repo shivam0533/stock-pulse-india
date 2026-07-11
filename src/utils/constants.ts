@@ -16,6 +16,7 @@ export const ROUTES = {
   SETTINGS: '/settings',
   BROKER_INTEGRATION: '/broker-integration',
   KOTAK_NEO_INTEGRATION: '/broker/kotak-neo',
+  SUBSCRIPTION: '/subscription',
   NOT_FOUND: '*',
   ADMIN_DASHBOARD: '/admin',
   ADMIN_USERS: '/admin/users',
@@ -27,6 +28,7 @@ export const ROUTES = {
   ADMIN_SUPPORT: '/admin/support',
   ADMIN_LOGS: '/admin/logs',
   ADMIN_SETTINGS: '/admin/settings',
+  ADMIN_SUBSCRIPTIONS: '/admin/subscriptions',
 } as const;
 
 export const QUERY_KEYS = {
