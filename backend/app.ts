@@ -26,6 +26,15 @@ const ALLOWED_ORIGIN_PATTERN = /^https:\/\/stock-pulse-india(-[a-z0-9]+)*-shivam
 /** Express app factory — kept separate from server.ts so the app can be imported in tests without binding a port. */
 export function createApp(): Express {
   const app = express();
+  // Railway (and Vercel/Heroku/Render — every reverse-proxy PaaS) terminates
+  // TLS and forwards requests through exactly one hop, setting `X-Forwarded-For`
+  // to the real client IP. Without this, Express's default `trust proxy: false`
+  // makes express-rate-limit's IP-based key generator throw
+  // ERR_ERL_UNEXPECTED_X_FORWARDED_FOR — and worse, without a trustworthy
+  // client IP every request behind the proxy can collapse onto the same
+  // rate-limit bucket, letting one user's request volume throttle another's.
+  // `1` trusts exactly the immediate proxy hop, not the whole forwarded chain.
+  app.set('trust proxy', 1);
   app.use(cors({
     // `callback(null, false)` (not an Error) — cors() then just omits the
     // Access-Control-Allow-Origin header, which is all a browser actually
