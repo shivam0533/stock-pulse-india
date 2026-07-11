@@ -88,8 +88,20 @@ export const brokerController = {
         });
       }
       const funds = await broker.getFunds();
+      if (req.params.brokerId?.toUpperCase() === ANGEL_ONE_BROKER_ID) {
+        // eslint-disable-next-line no-console
+        console.log('[AngelOne][diag] getFunds SUCCEEDED', { userId: req.userId, sessionId: (broker as AngelOneService).getDiagnosticId() });
+      }
       sendSuccess(res, funds);
     } catch (err) {
+      if (req.params.brokerId?.toUpperCase() === ANGEL_ONE_BROKER_ID) {
+        // eslint-disable-next-line no-console
+        console.error('[AngelOne][diag] getFunds FAILED', {
+          userId: req.userId,
+          message: err instanceof Error ? err.message : String(err),
+          statusCode: hasStatusCode(err) ? err.statusCode : undefined,
+        });
+      }
       handleError(res, err);
     }
   },
