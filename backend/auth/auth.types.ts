@@ -13,6 +13,8 @@ export interface UserPreferences {
   };
 }
 
+export type AppUserRole = 'user' | 'admin';
+
 export interface AppUser {
   id: string;
   name: string;
@@ -23,6 +25,7 @@ export interface AppUser {
   kycStatus: 'pending' | 'verified' | 'rejected';
   joinedAt: number;
   preferences: UserPreferences;
+  role: AppUserRole;
 }
 
 export interface AuthResponse {

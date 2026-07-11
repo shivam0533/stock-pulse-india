@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Bell, CheckCheck, Newspaper, Receipt, TrendingUp, Info } from 'lucide-react';
+import { Bell, CheckCheck, Newspaper, Receipt, TrendingUp, Info, Megaphone, AlertTriangle } from 'lucide-react';
 import { useNotificationsStore } from '@store/notifications.store';
 import { formatRelativeTime } from '@utils/format';
 import { cn } from '@utils/cn';
@@ -12,6 +12,9 @@ const TYPE_ICON: Record<NotificationType, typeof Bell> = {
   order: Receipt,
   news: Newspaper,
   system: Info,
+  maintenance: AlertTriangle,
+  'market-alert': TrendingUp,
+  popup: Megaphone,
 };
 
 const TYPE_CLASSES: Record<NotificationType, string> = {
@@ -19,6 +22,9 @@ const TYPE_CLASSES: Record<NotificationType, string> = {
   order: 'bg-brand-400/15 text-brand-300',
   news: 'bg-ink-700 text-ink-200',
   system: 'bg-ink-700 text-ink-200',
+  maintenance: 'bg-brand-400/15 text-brand-300',
+  'market-alert': 'bg-gain-subtle text-gain',
+  popup: 'bg-loss-subtle text-loss',
 };
 
 export function NotificationsMenu() {

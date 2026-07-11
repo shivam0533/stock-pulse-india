@@ -1,3 +1,5 @@
+export type UserRole = 'user' | 'admin';
+
 export interface User {
   id: string;
   name: string;
@@ -8,6 +10,7 @@ export interface User {
   kycStatus: 'pending' | 'verified' | 'rejected';
   joinedAt: number;
   preferences: UserPreferences;
+  role: UserRole;
 }
 
 export interface UserPreferences {

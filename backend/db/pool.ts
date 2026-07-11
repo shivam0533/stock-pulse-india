@@ -35,6 +35,117 @@ export async function ensureUsersTable(): Promise<void> {
       joined_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // Added for the Admin Panel (role-gating) — a plain ALTER so this stays
+  // safe to re-run on every startup, same convention as the CREATE TABLE
+  // above; existing rows default to 'user'.
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';`);
+  // Data-integrity guard, not the security boundary (requireAdmin already
+  // only ever checks for the exact string 'admin') — still worth rejecting
+  // any other value at the DB level in case a future code path writes role
+  // without going through auth.service.ts's own admin-email check.
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_role_check') THEN
+        ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('user', 'admin'));
+      END IF;
+    END $$;
+  `);
   // eslint-disable-next-line no-console
   console.log('[DB] users table ready');
+}
+
+/**
+ * Called once at startup, alongside ensureUsersTable() — the Admin Panel's
+ * own tables. Same "CREATE TABLE IF NOT EXISTS, no migration framework"
+ * convention as above, kept in one place since they're all part of the same
+ * feature and small enough not to warrant separate files.
+ */
+export async function ensureAdminTables(): Promise<void> {
+  if (!connectionString) return; // ensureUsersTable() already warned once
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS login_logs (
+      id UUID PRIMARY KEY,
+      user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      email TEXT NOT NULL,
+      ip_address TEXT,
+      user_agent TEXT,
+      success BOOLEAN NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_logs (
+      id UUID PRIMARY KEY,
+      admin_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      action TEXT NOT NULL,
+      target TEXT,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  // Was NOT NULL + ON DELETE CASCADE — deleting an admin account would have
+  // erased their entire audit trail, defeating the point of an audit log.
+  // Safe to ALTER unconditionally: this table is brand new with zero rows
+  // in every environment this has run in so far. CREATE TABLE IF NOT EXISTS
+  // above is a no-op on a table that already exists (e.g. from an earlier
+  // run of this same function with the old CASCADE definition), so the FK
+  // itself also needs an explicit drop-and-recreate, not just the column.
+  await pool.query(`ALTER TABLE admin_logs ALTER COLUMN admin_user_id DROP NOT NULL;`);
+  await pool.query(`ALTER TABLE admin_logs DROP CONSTRAINT IF EXISTS admin_logs_admin_user_id_fkey;`);
+  await pool.query(`ALTER TABLE admin_logs ADD CONSTRAINT admin_logs_admin_user_id_fkey FOREIGN KEY (admin_user_id) REFERENCES users(id) ON DELETE SET NULL;`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id UUID PRIMARY KEY,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'system',
+      target_user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  // Same reasoning — deleting the admin who sent a notification shouldn't
+  // retroactively delete it from every recipient's inbox.
+  await pool.query(`ALTER TABLE notifications ALTER COLUMN created_by DROP NOT NULL;`);
+  await pool.query(`ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_created_by_fkey;`);
+  await pool.query(`ALTER TABLE notifications ADD CONSTRAINT notifications_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL;`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notification_reads (
+      notification_id UUID NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      read_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (notification_id, user_id)
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_by UUID REFERENCES users(id) ON DELETE SET NULL
+    );
+  `);
+
+  // Indexes for the query patterns admin.service.ts actually runs — every
+  // list endpoint orders by created_at DESC, and a few filter by user.
+  // CREATE INDEX IF NOT EXISTS (no CONCURRENTLY): these tables are new/empty
+  // at every point this has run so far, so a brief write-lock during
+  // creation is a non-issue; add CONCURRENTLY by hand instead if this is
+  // ever run against a table with real production traffic already on it.
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_login_logs_created_at ON login_logs (created_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_login_logs_user_id ON login_logs (user_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_admin_logs_created_at ON admin_logs (created_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_admin_logs_admin_user_id ON admin_logs (admin_user_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications (created_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_target_user_id ON notifications (target_user_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_notification_reads_user_id ON notification_reads (user_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_joined_at ON users (joined_at);`);
+
+  // eslint-disable-next-line no-console
+  console.log('[DB] admin tables ready');
 }

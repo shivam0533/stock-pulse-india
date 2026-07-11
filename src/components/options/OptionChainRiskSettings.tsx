@@ -197,21 +197,6 @@ export function OptionChainRiskSettings() {
             Reset to Default
           </button>
         </div>
-
-        {/* Currently-applied snapshot */}
-        <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-ink-600/30">
-          {[
-            { label: 'Max Loss',   value: `${maxLossPercent}%` },
-            { label: 'Max Profit', value: `${maxProfitPercent}%` },
-            { label: 'Auto Apply', value: applyAutomatically ? 'ON' : 'OFF' },
-            { label: 'Paper Only', value: paperTradingOnly ? 'ON' : 'OFF' },
-          ].map(({ label, value }) => (
-            <div key={label} className="flex items-center justify-between text-2xs">
-              <span className="text-ink-400">{label}</span>
-              <span className="font-mono text-ink-200">{value}</span>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );

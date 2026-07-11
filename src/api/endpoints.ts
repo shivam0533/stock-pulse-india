@@ -26,4 +26,22 @@ export const ENDPOINTS = {
   dashboard: {
     accountSummary: '/dashboard/account-summary',
   },
+  settings: {
+    public: '/settings/public',
+  },
+  notifications: {
+    unread: '/notifications/unread',
+    markRead: '/notifications/mark-read',
+  },
+  admin: {
+    dashboard: '/admin/dashboard',
+    users: '/admin/users',
+    user: (id: string) => `/admin/users/${id}`,
+    supportSearch: '/admin/support/search',
+    loginLogs: '/admin/logs/login',
+    adminLogs: '/admin/logs/admin-actions',
+    signupsPerDay: '/admin/analytics/signups',
+    notifications: '/admin/notifications',
+    settings: '/admin/settings',
+  },
 } as const;

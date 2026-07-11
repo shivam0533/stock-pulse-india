@@ -37,8 +37,8 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 function NumberField({
-  label, value, onChange, suffix,
-}: { label: string; value: number; onChange: (v: number) => void; suffix?: string }) {
+  label, value, onChange, suffix, max,
+}: { label: string; value: number; onChange: (v: number) => void; suffix?: string; max?: number }) {
   // Free-typed text, decoupled from `value` — see OptionChainRiskSettings.tsx's
   // PercentInput for why a native type="number" input bound straight to a
   // re-validated number silently reverts mid-keystroke (e.g. typing "40"
@@ -48,7 +48,9 @@ function NumberField({
 
   return (
     <div>
-      <div className="text-2xs text-ink-300 uppercase tracking-wide mb-1">{label}</div>
+      <div className="text-2xs text-ink-300 uppercase tracking-wide mb-1">
+        {label}{max !== undefined && <span className="normal-case text-ink-500"> (max {max})</span>}
+      </div>
       <div className="flex items-center gap-1.5 bg-ink-900/60 border border-ink-600/60 rounded-xl px-3 py-2 focus-within:border-brand-400/60 transition-colors">
         <input
           type="text"
@@ -59,7 +61,7 @@ function NumberField({
             if (!/^\d*\.?\d*$/.test(raw)) return;
             setText(raw);
             const v = parseFloat(raw);
-            if (!Number.isNaN(v) && v >= 0) onChange(v);
+            if (!Number.isNaN(v) && v >= 0 && (max === undefined || v <= max)) onChange(v);
           }}
           onBlur={() => setText(String(value))}
           className="w-full bg-transparent font-mono text-sm text-ink-50 tabular-nums outline-none"
@@ -269,6 +271,7 @@ export function AutoTradingPanel() {
             label="Max Trades / Day"
             value={draft.maxTradesPerDay}
             onChange={(v) => setDraft((d) => ({ ...d, maxTradesPerDay: v }))}
+            max={10}
           />
           <NumberField
             label="Max Daily Loss"

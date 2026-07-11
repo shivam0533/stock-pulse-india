@@ -119,6 +119,8 @@ interface NotificationsState {
   items: AppNotification[];
   /** Prepends a new, unread, live-generated notification and caps the list at MAX_NOTIFICATIONS. */
   push: (input: Pick<AppNotification, 'type' | 'title' | 'message'> & Partial<Pick<AppNotification, 'link'>>) => void;
+  /** Same as push(), but preserves the server's own id/timestamp (deduped by id) instead of minting new ones — used for Admin Panel-sent notifications. */
+  pushFromServer: (input: Pick<AppNotification, 'id' | 'type' | 'title' | 'message' | 'timestamp'>) => void;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   clear: () => void;
@@ -142,6 +144,11 @@ export const useNotificationsStore = create<NotificationsState>()(
           read: false,
           link,
         };
+        set({ items: [notification, ...get().items].slice(0, MAX_NOTIFICATIONS) });
+      },
+      pushFromServer: ({ id, type, title, message, timestamp }) => {
+        if (get().items.some((n) => n.id === id)) return; // already shown this session
+        const notification: AppNotification = { id, type, title, message, timestamp, read: false };
         set({ items: [notification, ...get().items].slice(0, MAX_NOTIFICATIONS) });
       },
       markAsRead: (id) =>

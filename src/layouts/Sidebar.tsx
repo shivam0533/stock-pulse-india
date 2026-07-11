@@ -13,28 +13,20 @@ import {
   PanelLeftClose,
   PanelLeft,
   X,
+  Users as UsersIcon,
+  Radio,
+  LifeBuoy,
+  ScrollText,
+  Bell,
+  ShieldCheck,
 } from 'lucide-react';
 import { Logo } from '@components/common/Logo';
 import { useUIStore } from '@store/ui.store';
+import { useAuthStore } from '@store/auth.store';
 import { useIsBelowLg } from '@hooks/useMediaQuery';
 import { ROUTES } from '@utils/constants';
 import { cn } from '@utils/cn';
-import { apiOrigin } from '@api/brokerApiClient';
 import type { NavItem } from '@/types';
-
-// TEMP DIAGNOSTIC — relays real on-device sidebar events to the backend log
-// so the actual runtime behavior on a real phone can be inspected without
-// needing DevTools access on that device. Remove once the drawer-close bug
-// is confirmed fixed.
-function relaySidebarLog(message: string): void {
-  // eslint-disable-next-line no-console
-  console.log(message);
-  fetch(`${apiOrigin()}/api/debug-log`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: `[Sidebar] ${message}` }),
-  }).catch(() => {});
-}
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', path: ROUTES.DASHBOARD, icon: LayoutDashboard },
@@ -47,8 +39,22 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Profile', path: ROUTES.PROFILE, icon: User },
 ];
 
+/** Only rendered for user.role === 'admin' — see the "Admin" section below. */
+const ADMIN_NAV_ITEMS: NavItem[] = [
+  { label: 'Dashboard', path: ROUTES.ADMIN_DASHBOARD, icon: LayoutDashboard },
+  { label: 'Users', path: ROUTES.ADMIN_USERS, icon: UsersIcon },
+  { label: 'Trades', path: ROUTES.ADMIN_TRADES, icon: ClipboardList },
+  { label: 'Live Activity', path: ROUTES.ADMIN_LIVE_ACTIVITY, icon: Radio },
+  { label: 'Analytics', path: ROUTES.ADMIN_ANALYTICS, icon: BarChart3 },
+  { label: 'Notifications', path: ROUTES.ADMIN_NOTIFICATIONS, icon: Bell },
+  { label: 'Support', path: ROUTES.ADMIN_SUPPORT, icon: LifeBuoy },
+  { label: 'Logs', path: ROUTES.ADMIN_LOGS, icon: ScrollText },
+  { label: 'Settings', path: ROUTES.ADMIN_SETTINGS, icon: ShieldCheck },
+];
+
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, mobileSidebarOpen, closeMobileSidebar } = useUIStore();
+  const isAdmin = useAuthStore((s) => s.user?.role === 'admin');
   // Must match this component's own Tailwind `lg:` classes (lg:sticky,
   // lg:z-30, lg:pointer-events-auto, the overlay's lg:hidden) exactly —
   // see useIsBelowLg's doc comment for why useIsMobile()'s 768px threshold
@@ -58,17 +64,6 @@ export function Sidebar() {
   const location = useLocation();
 
   const collapsed = !isMobile && sidebarCollapsed;
-
-  // TEMP DIAGNOSTIC — logs the exact state driving the drawer's visual
-  // position on every relevant change, so a real device's actual behavior
-  // is visible without DevTools.
-  useEffect(() => {
-    relaySidebarLog(
-      `render: innerWidth=${window.innerWidth}, isMobile=${isMobile}, mobileSidebarOpen=${mobileSidebarOpen}, ` +
-      `computed_x=${isMobile ? (mobileSidebarOpen ? 0 : -260) : 0}, pathname=${location.pathname}`,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMobile, mobileSidebarOpen, location.pathname]);
 
   // Belt-and-suspenders: close the mobile drawer the instant the route
   // actually changes, independent of whether the NavLink's own onClick fired
@@ -100,7 +95,7 @@ export function Sidebar() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => { relaySidebarLog('overlay clicked'); closeMobileSidebar(); }}
+            onClick={closeMobileSidebar}
             className="fixed inset-0 bg-ink-950/70 backdrop-blur-sm z-40 lg:hidden"
             aria-hidden
           />
@@ -132,8 +127,7 @@ export function Sidebar() {
           )}
           {isMobile && (
             <button
-              onClick={() => { relaySidebarLog('X button clicked'); closeMobileSidebar(); }}
-              onTouchEnd={() => relaySidebarLog('X button touchend')}
+              onClick={closeMobileSidebar}
               className="p-1.5 rounded-lg text-ink-200 hover:text-ink-50 hover:bg-ink-700"
               aria-label="Close sidebar"
             >
@@ -143,13 +137,13 @@ export function Sidebar() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
               end={item.path === ROUTES.DASHBOARD}
-              onClick={isMobile ? () => { relaySidebarLog(`navlink clicked: ${item.path}`); closeMobileSidebar(); } : undefined}
+              onClick={isMobile ? closeMobileSidebar : undefined}
               className={({ isActive }) =>
                 cn(
                   'group relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all',
@@ -189,6 +183,57 @@ export function Sidebar() {
               )}
             </NavLink>
           ))}
+
+          {isAdmin && (
+            <>
+              <div className="pt-3 mt-2 border-t border-ink-600/30">
+                {!collapsed && (
+                  <div className="px-3 pb-2 text-2xs text-ink-300 uppercase tracking-wide">Admin</div>
+                )}
+              </div>
+              {ADMIN_NAV_ITEMS.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  end={item.path === ROUTES.ADMIN_DASHBOARD}
+                  onClick={isMobile ? closeMobileSidebar : undefined}
+                  className={({ isActive }) =>
+                    cn(
+                      'group relative flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all',
+                      'text-sm font-medium',
+                      isActive
+                        ? 'bg-brand-400/10 text-brand-300 border border-brand-400/20'
+                        : 'text-ink-200 hover:bg-ink-700/60 hover:text-ink-50 border border-transparent'
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <item.icon
+                        size={18}
+                        strokeWidth={isActive ? 2.4 : 2}
+                        className={cn('shrink-0', collapsed && 'mx-auto')}
+                      />
+                      {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
+                      {!collapsed && isActive && <span className="h-1.5 w-1.5 rounded-full bg-brand-400 shrink-0" />}
+                      {collapsed && (
+                        <span
+                          className={cn(
+                            'pointer-events-none absolute left-full ml-3 px-2.5 py-1.5 rounded-lg whitespace-nowrap',
+                            'bg-ink-800 border border-ink-600 text-xs font-medium text-ink-50 shadow-xl z-50',
+                            'opacity-0 scale-95 origin-left transition-all duration-100',
+                            'group-hover:opacity-100 group-hover:scale-100'
+                          )}
+                        >
+                          {item.label}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </>
+          )}
         </nav>
 
         {/* Footer / collapse toggle */}

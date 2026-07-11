@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { placeOptionOrder, exitOptionOrder, getActiveBrokerAdapter } from '@services/broker/brokerExecution.service';
 import { paperBrokerAdapter } from '@services/broker/paperBrokerAdapter';
 import { useOptionChainRiskStore } from '@store/optionChainRisk.store';
+import { usePublicSettingsStore } from '@store/publicSettings.store';
 import { useOptionChainToastStore } from '@store/optionChainToast.store';
 import { getPaperLotSize } from '@config/lotSize.config';
 import { isDevTestingModeEnabled } from '@config/devTestingMode';
@@ -274,6 +275,14 @@ export const useOptionTradeStore = create<OptionTradeState>()(
       statsResetAt: null,
 
       openTrade: async (params) => {
+        // Admin Panel's "Trading Enabled" kill switch (Settings page) —
+        // checked here so it applies to both the manual Order Window and
+        // Auto Trading, which both call this same function.
+        if (!usePublicSettingsStore.getState().tradingEnabled) {
+          set({ tradeError: 'Trading is currently disabled by the administrator. Please try again later.' });
+          return false;
+        }
+
         if (get().activeTrade?.status === 'OPEN') {
           set({ tradeError: 'You already have an active open trade. Exit it before opening a new position.' });
           return false;

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useOptionChain } from '@hooks/useOptionChain';
 import { selectBestTrade } from '@services/aiDecisionEngine.service';
-import { useAITradeSelectionStore } from '@store/aiTradeSelection.store';
+import { AI_TRADE_SELECTION_SETTINGS } from '@store/aiTradeSelection.store';
 import { useAutoTradingStore } from '@store/autoTrading.store';
 import { useOptionTradeStore } from '@store/optionTrade.store';
 import { useNotificationsStore } from '@store/notifications.store';
@@ -100,7 +100,7 @@ export function NotificationEventBridge() {
     const tick = () => {
       const d = dataRef.current;
       if (!d) return;
-      const { minLTP, maxLTP } = useAITradeSelectionStore.getState();
+      const { minLTP, maxLTP } = AI_TRADE_SELECTION_SETTINGS;
       const result = selectBestTrade(
         { strikes: d.strikes, expiry: d.expiry.label, spotPrice: d.spotPrice, pcr: d.pcr, maxPain: d.maxPain },
         { minLTP, maxLTP },

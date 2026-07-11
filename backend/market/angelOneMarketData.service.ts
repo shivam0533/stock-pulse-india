@@ -50,22 +50,7 @@ export class AngelOneMarketDataService {
       headers: { ...authHeaders(token), ...networkHeaders },
       data: { mode: 'FULL', exchangeTokens: { NFO: nfoTokens } },
     });
-    // TEMP DIAGNOSTIC — the exact envelope Angel One sent back, before
-    // unwrapAngelOneEnvelope touches it at all.
-    // eslint-disable-next-line no-console
-    console.log('[Diag] getQuotes RAW envelope (pre-unwrap)', JSON.stringify(body));
     const data = unwrapAngelOneEnvelope(body);
-
-    // TEMP DIAGNOSTIC — the code only ever read `fetched`; if Angel One
-    // rejects a token it goes into `unfetched` instead, silently producing
-    // ltp: 0 downstream with zero indication why.
-    // eslint-disable-next-line no-console
-    console.log('[Diag] getQuotes raw response', {
-      requestedTokens: nfoTokens,
-      fetchedCount: data.fetched?.length ?? 0,
-      fetched: data.fetched,
-      unfetched: data.unfetched,
-    });
 
     for (const entry of data.fetched ?? []) {
       result.set(entry.symbolToken, {
@@ -90,15 +75,7 @@ export class AngelOneMarketDataService {
       headers: { ...authHeaders(token), ...networkHeaders },
       data: { mode: 'LTP', exchangeTokens: { NSE: [nseIndexToken] } },
     });
-    // TEMP DIAGNOSTIC — the exact envelope Angel One sent back, before unwrap.
-    // eslint-disable-next-line no-console
-    console.log('[Diag] getIndexQuote RAW envelope (pre-unwrap)', JSON.stringify(body));
     const data = unwrapAngelOneEnvelope(body);
-    // TEMP DIAGNOSTIC
-    // eslint-disable-next-line no-console
-    console.log('[Diag] getIndexQuote raw response', {
-      requestedToken: nseIndexToken, fetched: data.fetched, unfetched: data.unfetched,
-    });
     return data.fetched?.[0]?.ltp ?? 0;
   }
 

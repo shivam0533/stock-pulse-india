@@ -36,3 +36,4 @@ export * from './notification.types';
 export * from './options.types';
 export * from './optionTrade.types';
 export * from './aiDecision.types';
+export * from './admin.types';

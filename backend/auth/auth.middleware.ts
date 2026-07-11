@@ -7,6 +7,7 @@ declare global {
   namespace Express {
     interface Request {
       userId?: string;
+      userRole?: 'user' | 'admin';
     }
   }
 }
@@ -36,5 +37,20 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   }
 
   req.userId = payload.sub;
+  req.userRole = payload.role;
+  next();
+}
+
+/**
+ * Gates every /api/admin/* route. Must run after requireAuth (relies on
+ * req.userRole, decoded straight from the JWT — never trusts a client-sent
+ * header/body field). Role is checked server-side only; the frontend's own
+ * route guard is a UX convenience, not the security boundary.
+ */
+export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+  if (req.userRole !== 'admin') {
+    sendError(res, 'Admin access required.', 403);
+    return;
+  }
   next();
 }

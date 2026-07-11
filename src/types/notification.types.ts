@@ -1,4 +1,4 @@
-export type NotificationType = 'price-alert' | 'order' | 'news' | 'system';
+export type NotificationType = 'price-alert' | 'order' | 'news' | 'system' | 'maintenance' | 'market-alert' | 'popup';
 
 export interface AppNotification {
   id: string;

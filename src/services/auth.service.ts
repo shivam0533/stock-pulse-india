@@ -10,7 +10,11 @@ import type {
   ChangePasswordRequest,
 } from '@/types';
 
-const USE_MOCK = import.meta.env.VITE_ENABLE_MOCK_API === 'true';
+// Deliberately independent of VITE_ENABLE_MOCK_API (which still governs the
+// unrelated Dashboard stock-search/portfolio mock services) — real accounts
+// are required for the Admin Panel's Users list to mean anything, so login/
+// signup/session always hit the real backend (backend/auth/*) now.
+const USE_MOCK = false;
 
 const MOCK_USER: User = {
   id: 'usr_001',
@@ -19,6 +23,7 @@ const MOCK_USER: User = {
   phone: '+91 98765 43210',
   panVerified: true,
   kycStatus: 'verified',
+  role: 'user',
   joinedAt: Date.now() - 1000 * 60 * 60 * 24 * 180,
   preferences: {
     defaultExchange: 'NSE',

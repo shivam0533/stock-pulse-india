@@ -1,10 +1,11 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '@layouts/AppLayout';
 import { AuthLayout } from '@layouts/AuthLayout';
 import { LoadingScreen } from '@components/loading/LoadingScreen';
 import { ProtectedRoute } from './ProtectedRoute';
 import { PublicRoute } from './PublicRoute';
+import { AdminRoute } from './AdminRoute';
 import { ROUTES } from '@utils/constants';
 
 const Login = lazy(() => import('@pages/Login'));
@@ -22,6 +23,17 @@ const Settings = lazy(() => import('@pages/Settings'));
 const BrokerIntegration = lazy(() => import('@pages/BrokerIntegration'));
 const KotakNeoIntegration = lazy(() => import('@pages/KotakNeoIntegration'));
 const NotFound = lazy(() => import('@pages/NotFound'));
+
+const AdminDashboard = lazy(() => import('@pages/admin/Dashboard'));
+const AdminUsers = lazy(() => import('@pages/admin/Users'));
+const AdminUserDetail = lazy(() => import('@pages/admin/UserDetail'));
+const AdminTrades = lazy(() => import('@pages/admin/Trades'));
+const AdminLiveActivity = lazy(() => import('@pages/admin/LiveActivity'));
+const AdminAnalytics = lazy(() => import('@pages/admin/Analytics'));
+const AdminNotifications = lazy(() => import('@pages/admin/Notifications'));
+const AdminSupport = lazy(() => import('@pages/admin/Support'));
+const AdminLogs = lazy(() => import('@pages/admin/Logs'));
+const AdminSettings = lazy(() => import('@pages/admin/Settings'));
 
 export function AppRouter() {
   return (
@@ -60,6 +72,20 @@ export function AppRouter() {
             <Route path={ROUTES.SETTINGS} element={<Settings />} />
             <Route path={ROUTES.BROKER_INTEGRATION} element={<BrokerIntegration />} />
             <Route path={ROUTES.KOTAK_NEO_INTEGRATION} element={<KotakNeoIntegration />} />
+
+            {/* Admin Panel — role-gated on top of ProtectedRoute's own auth check */}
+            <Route element={<AdminRoute><Outlet /></AdminRoute>}>
+              <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboard />} />
+              <Route path={ROUTES.ADMIN_USERS} element={<AdminUsers />} />
+              <Route path={ROUTES.ADMIN_USER_DETAIL} element={<AdminUserDetail />} />
+              <Route path={ROUTES.ADMIN_TRADES} element={<AdminTrades />} />
+              <Route path={ROUTES.ADMIN_LIVE_ACTIVITY} element={<AdminLiveActivity />} />
+              <Route path={ROUTES.ADMIN_ANALYTICS} element={<AdminAnalytics />} />
+              <Route path={ROUTES.ADMIN_NOTIFICATIONS} element={<AdminNotifications />} />
+              <Route path={ROUTES.ADMIN_SUPPORT} element={<AdminSupport />} />
+              <Route path={ROUTES.ADMIN_LOGS} element={<AdminLogs />} />
+              <Route path={ROUTES.ADMIN_SETTINGS} element={<AdminSettings />} />
+            </Route>
           </Route>
 
           {/* Fallbacks */}

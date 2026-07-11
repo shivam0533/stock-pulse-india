@@ -47,6 +47,20 @@ export function isAngelOneConfigured(): boolean {
   return !!angelOneConfig.apiKey;
 }
 
+/**
+ * Comma-separated emails (case-insensitive) that get role='admin' the
+ * moment they sign up or log in for real — the no-manual-SQL way to bootstrap
+ * the first admin account for the Admin Panel. Everyone else defaults to
+ * role='user'. Re-checked on every login too, so adding/removing an email
+ * here takes effect without touching the database directly.
+ */
+export const adminEmails = new Set(
+  (process.env.ADMIN_EMAILS ?? '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
+);
+
 function maskKey(key: string): string {
   if (!key) return '(empty)';
   if (key.length <= 4) return '*'.repeat(key.length);

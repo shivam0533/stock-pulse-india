@@ -1,82 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, RotateCcw, Target } from 'lucide-react';
+import { Target } from 'lucide-react';
 import { selectBestTrade } from '@services/aiDecisionEngine.service';
-import {
-  useAITradeSelectionStore,
-  DEFAULT_AI_TRADE_SELECTION_SETTINGS,
-  type AITradeSelectionSettings,
-} from '@store/aiTradeSelection.store';
+import { AI_TRADE_SELECTION_SETTINGS } from '@store/aiTradeSelection.store';
 import { useAutoTradingStore } from '@store/autoTrading.store';
 import { formatIndianNumber } from '@utils/format';
 import { cn } from '@utils/cn';
 import type { AITradeSelectionResult, OptionChainData } from '@/types';
 
 const ANALYSIS_INTERVAL_MS = 8000;
-
-function LTPInput({
-  label, value, onChange,
-}: { label: string; value: number; onChange: (v: number) => void }) {
-  // Free-typed text, decoupled from `value` — see OptionChainRiskSettings.tsx's
-  // PercentInput for why a native type="number" input bound straight to a
-  // re-validated number silently reverts mid-keystroke (e.g. typing "40"
-  // shows "4" once the "0" makes the parsed value momentarily invalid).
-  const [text, setText] = useState(String(value));
-  useEffect(() => { setText(String(value)); }, [value]);
-
-  return (
-    <div>
-      <div className="text-xs text-ink-200 mb-1">{label}</div>
-      <div className="flex items-center gap-1.5 bg-ink-900/60 border border-ink-600/60 rounded-xl px-3 py-2 focus-within:border-brand-400/60 transition-colors">
-        <span className="text-xs text-ink-400 shrink-0">₹</span>
-        <input
-          type="text"
-          inputMode="decimal"
-          value={text}
-          onChange={(e) => {
-            const raw = e.target.value;
-            if (!/^\d*\.?\d*$/.test(raw)) return;
-            setText(raw);
-            const v = parseFloat(raw);
-            if (!Number.isNaN(v) && v >= 0) onChange(v);
-          }}
-          onBlur={() => setText(String(value))}
-          className="w-full bg-transparent font-mono text-sm text-ink-50 tabular-nums outline-none"
-        />
-      </div>
-    </div>
-  );
-}
+const { minLTP, maxLTP } = AI_TRADE_SELECTION_SETTINGS;
 
 /**
  * AI Trade Selection Logic — a second, additive capability of the Option
  * Chain AI Decision Engine. Unlike AIDecisionEngineCard (which analyzes only
  * the ATM strike), this scans every strike's CE and PE contract, ignores
- * anything outside the editable Min/Max LTP range, and auto-selects the
+ * anything outside the fixed Min/Max LTP range, and auto-selects the
  * single best Strike + CE/PE + BUY/SELL combination once its confidence
- * clears 80% — otherwise WAIT. Selection only: no order is ever placed.
+ * clears the configured threshold — otherwise WAIT. Selection only: no
+ * order is ever placed.
  */
 export function AITradeSelectionPanel({ data }: { data: OptionChainData | undefined }) {
-  const { minLTP, maxLTP, applySettings, resetToDefault } = useAITradeSelectionStore();
-  const [draft, setDraft] = useState<AITradeSelectionSettings>({ minLTP, maxLTP });
-  const [saved, setSaved] = useState(false);
   const [result, setResult] = useState<AITradeSelectionResult | null>(null);
 
   const dataRef = useRef(data);
   dataRef.current = data;
-
-  const hasChanges = draft.minLTP !== minLTP || draft.maxLTP !== maxLTP;
-
-  const handleApply = () => {
-    applySettings(draft);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1800);
-  };
-
-  const handleReset = () => {
-    resetToDefault();
-    setDraft(DEFAULT_AI_TRADE_SELECTION_SETTINGS);
-  };
 
   useEffect(() => {
     if (!data) return;
@@ -96,7 +44,7 @@ export function AITradeSelectionPanel({ data }: { data: OptionChainData | undefi
     analyze();
     const id = setInterval(analyze, ANALYSIS_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [data, minLTP, maxLTP]);
+  }, [data]);
 
   return (
     <div className="rounded-2xl border border-ink-600/60 p-4 bg-ink-800/60 backdrop-blur-sm shadow-card">
@@ -106,39 +54,8 @@ export function AITradeSelectionPanel({ data }: { data: OptionChainData | undefi
         <h3 className="font-display text-sm font-semibold text-ink-50">AI Trade Selection</h3>
       </div>
       <p className="text-2xs text-ink-400 mb-3">
-        Auto-selects the best contract from strikes within your LTP range.
+        Auto-selects the best contract from strikes with LTP between ₹{minLTP} and ₹{maxLTP}.
       </p>
-
-      {/* Settings */}
-      <div className="grid grid-cols-2 gap-2 mb-3">
-        <LTPInput label="Minimum LTP" value={draft.minLTP} onChange={(v) => setDraft((d) => ({ ...d, minLTP: v }))} />
-        <LTPInput label="Maximum LTP" value={draft.maxLTP} onChange={(v) => setDraft((d) => ({ ...d, maxLTP: v }))} />
-      </div>
-
-      <div className="flex gap-2 mb-4">
-        <button
-          type="button"
-          onClick={handleApply}
-          disabled={!hasChanges}
-          className={cn(
-            'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors',
-            hasChanges
-              ? 'bg-brand-400 text-ink-950 hover:bg-brand-300'
-              : 'bg-ink-700/60 text-ink-400 cursor-not-allowed',
-          )}
-        >
-          {saved && <Check size={13} />}
-          {saved ? 'Settings Applied' : 'Apply Settings'}
-        </button>
-        <button
-          type="button"
-          onClick={handleReset}
-          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-ink-200 border border-ink-600 hover:border-ink-400 hover:text-ink-50 bg-ink-700/60 transition-colors"
-        >
-          <RotateCcw size={12} />
-          Reset
-        </button>
-      </div>
 
       {/* Result */}
       <AnimatePresence mode="wait">

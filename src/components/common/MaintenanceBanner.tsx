@@ -1,0 +1,25 @@
+import { useEffect } from 'react';
+import { AlertTriangle } from 'lucide-react';
+import { usePublicSettingsStore } from '@store/publicSettings.store';
+
+const POLL_MS = 5 * 60 * 1000;
+
+/** Fetches /api/settings/public once on mount and periodically, and renders the Maintenance Mode banner (set from the Admin Panel) when active. */
+export function MaintenanceBanner() {
+  const { maintenanceMode, fetch } = usePublicSettingsStore();
+
+  useEffect(() => {
+    fetch();
+    const id = setInterval(fetch, POLL_MS);
+    return () => clearInterval(id);
+  }, [fetch]);
+
+  if (!maintenanceMode) return null;
+
+  return (
+    <div className="flex items-center gap-2 px-4 py-2 bg-brand-400/15 border-b border-brand-400/30 text-brand-300 text-xs font-medium">
+      <AlertTriangle size={14} className="shrink-0" />
+      Scheduled maintenance is in progress — some features may be temporarily affected.
+    </div>
+  );
+}

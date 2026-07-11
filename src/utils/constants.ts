@@ -17,6 +17,16 @@ export const ROUTES = {
   BROKER_INTEGRATION: '/broker-integration',
   KOTAK_NEO_INTEGRATION: '/broker/kotak-neo',
   NOT_FOUND: '*',
+  ADMIN_DASHBOARD: '/admin',
+  ADMIN_USERS: '/admin/users',
+  ADMIN_USER_DETAIL: '/admin/users/:id',
+  ADMIN_TRADES: '/admin/trades',
+  ADMIN_LIVE_ACTIVITY: '/admin/live-activity',
+  ADMIN_ANALYTICS: '/admin/analytics',
+  ADMIN_NOTIFICATIONS: '/admin/notifications',
+  ADMIN_SUPPORT: '/admin/support',
+  ADMIN_LOGS: '/admin/logs',
+  ADMIN_SETTINGS: '/admin/settings',
 } as const;
 
 export const QUERY_KEYS = {

@@ -13,6 +13,8 @@ import { VoiceAnnouncer } from '@components/options/VoiceAnnouncer';
 import { BrokerSessionMonitor } from '@components/broker/BrokerSessionMonitor';
 import { BrokerToaster } from '@components/broker/BrokerToaster';
 import { AngelOneLiveModeSync } from '@components/broker/AngelOneLiveModeSync';
+import { MaintenanceBanner } from '@components/common/MaintenanceBanner';
+import { ServerNotificationsSync } from '@components/common/ServerNotificationsSync';
 
 export function AppLayout() {
   return (
@@ -29,10 +31,12 @@ export function AppLayout() {
       <BrokerSessionMonitor />
       <BrokerToaster />
       <AngelOneLiveModeSync />
+      <ServerNotificationsSync />
 
       <Sidebar />
 
       <div className="flex-1 flex flex-col min-w-0 relative pb-16 lg:pb-0">
+        <MaintenanceBanner />
         <TopNavbar />
         <main className="flex-1 px-4 lg:px-6 py-6 lg:py-8">
           <Breadcrumb className="mb-4" />
