@@ -68,7 +68,7 @@ function parseEmailList(raw: string | undefined): Set<string> {
 export const superAdminEmails = parseEmailList(process.env.SUPER_ADMIN_EMAILS);
 export const adminEmails = parseEmailList(process.env.ADMIN_EMAILS);
 
-function maskKey(key: string): string {
+export function maskKey(key: string): string {
   if (!key) return '(empty)';
   if (key.length <= 4) return '*'.repeat(key.length);
   return '*'.repeat(key.length - 4) + key.slice(-4);

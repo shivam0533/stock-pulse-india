@@ -1,5 +1,8 @@
 import type { Request, Response } from 'express';
 import { brokerManagerService, type SupportedBrokerId } from '../services/brokerManager.service';
+import type { AngelOneService } from '../brokers/angelOne/angelOne.service';
+import { ANGEL_ONE_BROKER_ID } from '../brokers/angelOne';
+import { angelOneConfig, maskKey } from '../config/env';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 
 /**
@@ -72,7 +75,19 @@ export const brokerController = {
 
   async getFunds(req: Request, res: Response): Promise<void> {
     try {
-      const funds = await resolveBroker(req).getFunds();
+      const broker = resolveBroker(req);
+      // Same multi-user session isolation diagnostic as the login handler
+      // (brokerMock.controller.ts) — logged before the call so the session
+      // fingerprint is captured even if getFunds() itself then throws.
+      if (req.params.brokerId?.toUpperCase() === ANGEL_ONE_BROKER_ID) {
+        // eslint-disable-next-line no-console
+        console.log('[AngelOne][diag] getFunds', {
+          userId: req.userId,
+          apiKeyUsed: maskKey(angelOneConfig.apiKey),
+          sessionId: (broker as AngelOneService).getDiagnosticId(),
+        });
+      }
+      const funds = await broker.getFunds();
       sendSuccess(res, funds);
     } catch (err) {
       handleError(res, err);

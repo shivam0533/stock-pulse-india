@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express';
 import { brokerManagerService } from '../services/brokerManager.service';
 import { ANGEL_ONE_BROKER_ID } from '../brokers/angelOne';
+import type { AngelOneService } from '../brokers/angelOne/angelOne.service';
 import { AngelOneApiError } from '../brokers/angelOne/angelOneHttp';
+import { angelOneConfig, maskKey } from '../config/env';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 
 /**
@@ -36,10 +38,22 @@ export const brokerMockController = {
       return;
     }
     try {
-      const session = await getDefaultBroker(req).login({
+      const broker = getDefaultBroker(req) as AngelOneService;
+      const session = await broker.login({
         clientCode: String(clientCode),
         pin: String(pin),
         totp: String(totp),
+      });
+      // Multi-user session isolation diagnostic — masked API key (identical
+      // for every user by design, Angel One's app key is not per-user) +
+      // userId + a non-reversible session fingerprint, so a support
+      // investigation can confirm from logs alone that two different users
+      // never share a session, without ever logging a real credential.
+      // eslint-disable-next-line no-console
+      console.log('[AngelOne][diag] login', {
+        userId: req.userId,
+        apiKeyUsed: maskKey(angelOneConfig.apiKey),
+        sessionId: broker.getDiagnosticId(),
       });
       sendSuccess(res, session, 200);
     } catch (err) {

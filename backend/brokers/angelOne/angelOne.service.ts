@@ -100,6 +100,23 @@ export class AngelOneService implements IAngelOneService {
   }
 
   /**
+   * Diagnostic-only identifier — never the raw token — for tracing which
+   * broker account and which specific session/token this instance is
+   * currently holding, without ever logging a real credential. Used to
+   * confirm per-user session isolation from production logs (masked
+   * clientCode + a short, non-reversible slice of the token never long
+   * enough to reuse as a credential).
+   */
+  getDiagnosticId(): string {
+    if (!this.session) return 'no-session';
+    const maskedClient = this.session.clientCode.length > 4
+      ? `${this.session.clientCode.slice(0, 2)}***${this.session.clientCode.slice(-2)}`
+      : '***';
+    const tokenTail = this.session.jwtToken.slice(-6);
+    return `${maskedClient}:${tokenTail}`;
+  }
+
+  /**
    * Read-only credentials the live market-data WebSocket needs to connect
    * (x-client-code / Authorization / x-feed-token — verified from the
    * official SDK's WebSocketV2). Returns null when not connected so callers
