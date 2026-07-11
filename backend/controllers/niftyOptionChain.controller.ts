@@ -49,7 +49,13 @@ function handleError(res: Response, err: unknown): void {
     return;
   }
   const message = err instanceof Error ? err.message : 'Unexpected NIFTY option chain error.';
-  sendError(res, message, 500);
+  // Every sibling controller (auth, admin, subscription, kotakNeo) logs its
+  // caught errors server-side — this one didn't, so a genuine failure here
+  // (e.g. the instrument-master download) was previously invisible in
+  // production logs, surfacing to the client only as an empty-message 500.
+  // eslint-disable-next-line no-console
+  console.error('[NiftyOptionChain API] error:', err);
+  sendError(res, message || 'Something went wrong. Please try again.', 500);
 }
 
 export const niftyOptionChainController = {
