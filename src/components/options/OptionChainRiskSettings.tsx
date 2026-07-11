@@ -65,36 +65,6 @@ function PercentInput({
   );
 }
 
-function LimitInput({
-  label, hint, value, onChange,
-}: { label: string; hint: string; value: number; onChange: (v: number) => void }) {
-  const [text, setText] = useState(String(value));
-  useEffect(() => { setText(String(value)); }, [value]);
-
-  return (
-    <div>
-      <div className="flex items-baseline justify-between mb-1">
-        <span className="text-xs text-ink-200">{label}</span>
-        <span className="text-2xs text-ink-400">{hint}</span>
-      </div>
-      <input
-        type="text"
-        inputMode="numeric"
-        value={text}
-        onChange={(e) => {
-          const raw = e.target.value;
-          if (!/^\d*$/.test(raw)) return;
-          setText(raw);
-          const v = parseInt(raw, 10);
-          if (!Number.isNaN(v) && v >= 0) onChange(v);
-        }}
-        onBlur={() => setText(String(value))}
-        className="w-full bg-ink-900/60 border border-ink-600/60 rounded-xl px-3 py-2 font-mono text-sm text-ink-50 tabular-nums outline-none focus:border-brand-400/60 transition-colors"
-      />
-    </div>
-  );
-}
-
 function ToggleRow({
   label, description, checked, onChange,
 }: { label: string; description: string; checked: boolean; onChange: (v: boolean) => void }) {
@@ -204,37 +174,6 @@ export function OptionChainRiskSettings() {
           description="Never route Option Chain trades to a live broker"
           checked={draft.paperTradingOnly}
           onChange={(v) => patch({ paperTradingOnly: v })}
-        />
-
-        <div className="border-t border-ink-600/30" />
-
-        <div className="text-2xs text-ink-400 uppercase tracking-wide">
-          Global Risk Management <span className="normal-case text-ink-500">(0 = no limit)</span>
-        </div>
-
-        <LimitInput
-          label="Max Orders Per Day"
-          hint="Manual + Auto Trading"
-          value={draft.maxOrdersPerDay}
-          onChange={(v) => patch({ maxOrdersPerDay: v })}
-        />
-        <LimitInput
-          label="Max Quantity Per Trade"
-          hint="lotSize × lots"
-          value={draft.maxQuantityPerTrade}
-          onChange={(v) => patch({ maxQuantityPerTrade: v })}
-        />
-        <LimitInput
-          label="Max Loss Per Trade (₹)"
-          hint="Blocks the order upfront"
-          value={draft.maxLossPerTrade}
-          onChange={(v) => patch({ maxLossPerTrade: v })}
-        />
-        <LimitInput
-          label="Stop After Consecutive Losses"
-          hint="Disables Buy for the rest of the day"
-          value={draft.maxConsecutiveLosses}
-          onChange={(v) => patch({ maxConsecutiveLosses: v })}
         />
 
         <div className="flex gap-2 pt-1">
