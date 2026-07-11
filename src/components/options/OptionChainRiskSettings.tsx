@@ -103,13 +103,11 @@ function ToggleRow({
 export function OptionChainRiskSettings() {
   const {
     maxLossPercent, maxProfitPercent, applyAutomatically, paperTradingOnly,
-    maxOrdersPerDay, maxQuantityPerTrade, maxLossPerTrade, maxConsecutiveLosses,
     applySettings, resetToDefault,
   } = useOptionChainRiskStore();
 
   const [draft, setDraft] = useState<RiskSettingsShape>({
     maxLossPercent, maxProfitPercent, applyAutomatically, paperTradingOnly,
-    maxOrdersPerDay, maxQuantityPerTrade, maxLossPerTrade, maxConsecutiveLosses,
   });
   const [saved, setSaved] = useState(false);
 
@@ -117,7 +115,6 @@ export function OptionChainRiskSettings() {
 
   const current: RiskSettingsShape = {
     maxLossPercent, maxProfitPercent, applyAutomatically, paperTradingOnly,
-    maxOrdersPerDay, maxQuantityPerTrade, maxLossPerTrade, maxConsecutiveLosses,
   };
   const hasChanges = JSON.stringify(draft) !== JSON.stringify(current);
 

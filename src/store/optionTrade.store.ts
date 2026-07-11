@@ -76,25 +76,6 @@ function istDateKey(epochMs: number): string {
   return `${ist.getUTCFullYear()}-${ist.getUTCMonth()}-${ist.getUTCDate()}`;
 }
 
-/** Total orders (manual + Auto Trading) placed today — completed trades opened today, plus the current OPEN trade if it was also opened today. */
-function ordersPlacedToday(history: CompletedOptionTrade[], activeTrade: ActiveOptionTrade | null): number {
-  const todayKey = istDateKey(Date.now());
-  const historyToday = history.filter((h) => istDateKey(h.entryTime) === todayKey).length;
-  const activeToday = activeTrade && istDateKey(activeTrade.entryTime) === todayKey ? 1 : 0;
-  return historyToday + activeToday;
-}
-
-/** Length of today's current losing streak — walks history (newest-first) until a win or a trade from a prior day is hit. */
-function consecutiveLossesToday(history: CompletedOptionTrade[]): number {
-  const todayKey = istDateKey(Date.now());
-  let count = 0;
-  for (const h of history) {
-    if (istDateKey(h.exitTime) !== todayKey || h.pnlAmount >= 0) break;
-    count += 1;
-  }
-  return count;
-}
-
 function tradeLabel(trade: Pick<ActiveOptionTrade, 'strike' | 'side'>): string {
   return `NIFTY ${trade.strike} ${trade.side}`;
 }
@@ -340,29 +321,6 @@ export const useOptionTradeStore = create<OptionTradeState>()(
           lotSize = params.lotSize;
         }
         const quantity = lotSize * params.lots;
-
-        // ── Global Risk Management — applies to every order, manual or Auto
-        // Trading, since both flows call this same openTrade(). Each limit is
-        // opt-in (0 = no limit) so existing behavior is unchanged until the
-        // user configures one in Risk Settings.
-        if (risk.maxQuantityPerTrade > 0 && quantity > risk.maxQuantityPerTrade) {
-          set({ tradeError: `Quantity ${quantity} exceeds the configured Max Quantity Per Trade (${risk.maxQuantityPerTrade}).` });
-          return false;
-        }
-        const estimatedEntryPrice = orderType === 'LIMIT' ? params.limitPrice! : params.entryPrice;
-        const estimatedMaxLoss = +((estimatedEntryPrice * quantity) * risk.maxLossPercent / 100).toFixed(2);
-        if (risk.maxLossPerTrade > 0 && estimatedMaxLoss > risk.maxLossPerTrade) {
-          set({ tradeError: `Potential loss ₹${estimatedMaxLoss} exceeds the configured Max Loss Per Trade (₹${risk.maxLossPerTrade}).` });
-          return false;
-        }
-        if (risk.maxOrdersPerDay > 0 && ordersPlacedToday(get().history, get().activeTrade) >= risk.maxOrdersPerDay) {
-          set({ tradeError: `Daily order limit reached (${risk.maxOrdersPerDay}). No more trades allowed today.` });
-          return false;
-        }
-        if (risk.maxConsecutiveLosses > 0 && consecutiveLossesToday(get().history) >= risk.maxConsecutiveLosses) {
-          set({ tradeError: `Trading paused for today — ${risk.maxConsecutiveLosses} consecutive losing trades hit the configured limit.` });
-          return false;
-        }
 
         const orderReq = {
           strike: params.strike,

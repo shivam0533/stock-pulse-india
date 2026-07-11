@@ -12,14 +12,6 @@ export interface OptionChainRiskSettings {
   maxProfitPercent: number;
   applyAutomatically: boolean;
   paperTradingOnly: boolean;
-  /** Hard cap on total orders (manual Buy clicks + Auto Trading entries) placed today. 0 = no limit. */
-  maxOrdersPerDay: number;
-  /** Hard cap on quantity (lotSize × lots) for any single order. 0 = no limit. */
-  maxQuantityPerTrade: number;
-  /** Hard cap on the computed ₹ max-loss for any single order (investment × Max Loss %). 0 = no limit. */
-  maxLossPerTrade: number;
-  /** Auto-disables Buy for the rest of the day once this many consecutive losing trades have closed today. 0 = disabled. */
-  maxConsecutiveLosses: number;
 }
 
 export const DEFAULT_OPTION_CHAIN_RISK_SETTINGS: OptionChainRiskSettings = {
@@ -27,10 +19,6 @@ export const DEFAULT_OPTION_CHAIN_RISK_SETTINGS: OptionChainRiskSettings = {
   maxProfitPercent: 7,
   applyAutomatically: true,
   paperTradingOnly: true,
-  maxOrdersPerDay: 0,
-  maxQuantityPerTrade: 0,
-  maxLossPerTrade: 0,
-  maxConsecutiveLosses: 0,
 };
 
 interface OptionChainRiskState extends OptionChainRiskSettings {
