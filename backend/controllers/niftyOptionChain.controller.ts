@@ -268,20 +268,15 @@ export const niftyOptionChainController = {
       }, STREAM_THROTTLE_MS);
     };
 
+    // Purely tick-driven: every SnapQuote frame -> angelOneWebSocketService
+    // emits 'tick' -> onTick (throttled) -> sendSnapshot() -> SSE push. No
+    // independent timer drives this stream. Fault recovery for a stalled
+    // upstream WebSocket lives in angelOneWebSocket.service.ts's own
+    // staleness watchdog (forces a reconnect+resubscribe if no real tick
+    // arrives for too long) — that's the correct layer to self-heal at,
+    // since only it can actually restart the dead connection; a timer here
+    // could only ever re-serve the same stale cached tick.
     angelOneWebSocketService.on('tick', onTick);
-    // Safety net (same pattern as the positions stream above): if the
-    // upstream Angel One WebSocket ever drops and its own reconnect happens
-    // to land at a moment with no live broker session (getAnyLiveAngelOneSession()
-    // returns null), connect() silently no-ops and nothing ever calls
-    // ensureSubscribed() again — since that only happens inside getChain(),
-    // which itself was only reachable via a tick that will now never come.
-    // The stream then looks alive forever (keep-alive still flows, so the
-    // client's EventSource stays OPEN and the LIVE badge stays on) while
-    // "Last Updated"/LTP/OI silently freeze until a full page reload opens
-    // a brand-new SSE connection and calls getChain() itself. Polling
-    // sendSnapshot() independently of ticks re-invokes ensureSubscribed()
-    // on a fixed cadence so a dropped connection self-heals within ~10s.
-    const pollInterval = setInterval(() => { void sendSnapshot(); }, 10_000);
     const keepAlive = setInterval(() => {
       if (!closed) res.write(': keep-alive\n\n');
     }, 15000);
@@ -289,7 +284,6 @@ export const niftyOptionChainController = {
     req.on('close', () => {
       closed = true;
       angelOneWebSocketService.off('tick', onTick);
-      clearInterval(pollInterval);
       clearInterval(keepAlive);
       if (throttleTimer) clearTimeout(throttleTimer);
     });

@@ -94,8 +94,8 @@ const RECONNECT_MAX_DELAY_MS = 60_000;
  * NIFTY's own index ticks essentially continuously during market hours, so
  * this long a gap with zero fresh frames is never legitimate market quiet.
  */
-const STALE_TICK_THRESHOLD_MS = 45_000;
-const STALE_TICK_CHECK_INTERVAL_MS = 15_000;
+const STALE_TICK_THRESHOLD_MS = 20_000;
+const STALE_TICK_CHECK_INTERVAL_MS = 5_000;
 
 export class AngelOneWebSocketService extends EventEmitter {
   private ws: WebSocket | null = null;
