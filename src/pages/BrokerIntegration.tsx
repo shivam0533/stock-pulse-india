@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plug, Info } from 'lucide-react';
+import { Plug, Info, Stethoscope } from 'lucide-react';
 import { Modal, Button } from '@components/ui';
 import { BrokerCard } from '@components/broker/BrokerCard';
 import { AngelOneLoginModal } from '@components/broker/AngelOneLoginModal';
 import { useBrokerConnectionStore } from '@store/brokerConnection.store';
+import { useAuthStore } from '@store/auth.store';
+import { brokerApiClient, toBrokerApiError } from '@api/brokerApiClient';
 import { BROKERS } from '@config/brokers.config';
 import { angelOneBrokerAdapter } from '@services/broker/angelOneBrokerAdapter';
 import { zerodhaBrokerAdapter } from '@services/broker/zerodhaBrokerAdapter';
@@ -32,6 +34,27 @@ export default function BrokerIntegration() {
   const [comingSoonOpen, setComingSoonOpen] = useState(false);
   const [angelOneModalOpen, setAngelOneModalOpen] = useState(false);
   const connections = useBrokerConnectionStore((s) => s.connections);
+  const role = useAuthStore((s) => s.user?.role);
+
+  // Temporary — Angel One RMS/entitlement investigation. One-click version
+  // of the diagnostic for anyone not comfortable with the browser console.
+  // Safe to remove once the provisioning question is closed.
+  const [diagLoading, setDiagLoading] = useState(false);
+  const [diagResult, setDiagResult] = useState<string | null>(null);
+  const [diagError, setDiagError] = useState<string | null>(null);
+  const runEntitlementCheck = async () => {
+    setDiagLoading(true);
+    setDiagError(null);
+    setDiagResult(null);
+    try {
+      const { data } = await brokerApiClient.get('/broker/ANGEL_ONE/diagnostics/entitlement-check');
+      setDiagResult(JSON.stringify(data, null, 2));
+    } catch (err) {
+      setDiagError(toBrokerApiError(err).message);
+    } finally {
+      setDiagLoading(false);
+    }
+  };
 
   const handleConnect = (brokerId: BrokerId) => {
     if (brokerId === 'ANGEL_ONE') setAngelOneModalOpen(true);
@@ -57,6 +80,17 @@ export default function BrokerIntegration() {
           Connect a broker to execute live orders. Paper Trading continues to work independently.
         </p>
       </motion.div>
+
+      {/* Temporary diagnostic — Angel One RMS/entitlement investigation, SUPER_ADMIN only */}
+      {role === 'super_admin' && connections.ANGEL_ONE && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-ink-600/60 bg-ink-800/60">
+          <Stethoscope size={16} className="text-ink-300 shrink-0" />
+          <span className="text-sm text-ink-200 flex-1">Angel One entitlement diagnostic (temporary, for the current investigation)</span>
+          <Button size="sm" variant="secondary" loading={diagLoading} onClick={runEntitlementCheck}>
+            Run Check
+          </Button>
+        </div>
+      )}
 
       {/* Info banner */}
       <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-brand-400/30 bg-brand-400/8 text-sm text-brand-300">
@@ -91,6 +125,17 @@ export default function BrokerIntegration() {
             <Button size="sm" onClick={() => setComingSoonOpen(false)}>Got it</Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Entitlement diagnostic results — temporary */}
+      <Modal open={!!diagResult || !!diagError} onClose={() => { setDiagResult(null); setDiagError(null); }} title="Entitlement Check Result" size="lg">
+        {diagError ? (
+          <p className="text-sm text-loss">{diagError}</p>
+        ) : (
+          <pre className="text-xs text-ink-100 bg-ink-900 border border-ink-600 rounded-xl p-3 overflow-auto max-h-[70vh] whitespace-pre-wrap">
+            {diagResult}
+          </pre>
+        )}
       </Modal>
     </div>
   );
