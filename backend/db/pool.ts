@@ -163,13 +163,14 @@ export async function ensureSubscriptionTables(): Promise<void> {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_end_date TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_subscription_status_check;`);
   await pool.query(`ALTER TABLE users ADD CONSTRAINT users_subscription_status_check CHECK (subscription_status IN ('TRIAL', 'ACTIVE', 'EXPIRED', 'CANCELLED'));`);
-  // Grandfathers in every account that existed before this migration ran
-  // (including ones with no trial_start_date yet) with 30 days of full
-  // access, rather than instantly locking them out the moment this deploys.
-  await pool.query(`
-    UPDATE users SET subscription_status = 'ACTIVE', subscription_end_date = now() + interval '30 days'
-    WHERE trial_start_date IS NULL;
-  `);
+  // NOTE: this table's one-time grandfather backfill (accounts that existed
+  // before the subscription system launched got 30 days of free ACTIVE
+  // access) has been removed. Signup no longer grants a free trial — new
+  // accounts are inserted with subscription_status = 'EXPIRED' directly
+  // (see auth.service.ts), which also leaves trial_start_date NULL forever.
+  // A "WHERE trial_start_date IS NULL" backfill would therefore now match
+  // every new unpaid signup on every server restart and silently re-grant
+  // them 30 free days, defeating the entire "pay before you trade" gate.
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS payment_requests (
@@ -177,6 +178,8 @@ export async function ensureSubscriptionTables(): Promise<void> {
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       utr TEXT NOT NULL,
       screenshot TEXT,
+      plan_id TEXT NOT NULL DEFAULT 'MONTHLY',
+      duration_days INTEGER NOT NULL DEFAULT 30,
       amount_inr NUMERIC NOT NULL DEFAULT 5999,
       status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED')),
       reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -185,6 +188,11 @@ export async function ensureSubscriptionTables(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // Added when 3-month/1-year plans landed alongside the original
+  // monthly-only plan — ALTER ... IF NOT EXISTS so this stays safe to re-run
+  // against a payment_requests table that already exists in production.
+  await pool.query(`ALTER TABLE payment_requests ADD COLUMN IF NOT EXISTS plan_id TEXT NOT NULL DEFAULT 'MONTHLY';`);
+  await pool.query(`ALTER TABLE payment_requests ADD COLUMN IF NOT EXISTS duration_days INTEGER NOT NULL DEFAULT 30;`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_payment_requests_status ON payment_requests (status);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_payment_requests_user_id ON payment_requests (user_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_payment_requests_created_at ON payment_requests (created_at DESC);`);

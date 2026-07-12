@@ -8,7 +8,7 @@ export const subscriptionService = {
     return data;
   },
 
-  async submitPaymentRequest(input: { utr: string; screenshot?: string | null }): Promise<PaymentRequestEntry> {
+  async submitPaymentRequest(input: { planId: string; utr: string; screenshot?: string | null }): Promise<PaymentRequestEntry> {
     const { data } = await apiClient.post<PaymentRequestEntry>(ENDPOINTS.subscription.paymentRequest, input);
     return data;
   },

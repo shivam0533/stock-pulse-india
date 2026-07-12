@@ -25,8 +25,8 @@ export const subscriptionController = {
 
   async submitPaymentRequest(req: Request, res: Response): Promise<void> {
     try {
-      const { utr, screenshot } = req.body ?? {};
-      const created = await subscriptionService.submitPaymentRequest(req.userId!, utr, screenshot || null);
+      const { planId, utr, screenshot } = req.body ?? {};
+      const created = await subscriptionService.submitPaymentRequest(req.userId!, planId, utr, screenshot || null);
       sendSuccess(res, created, 201);
     } catch (err) {
       handleError(res, err);

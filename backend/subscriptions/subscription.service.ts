@@ -2,10 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { pool } from '../db/pool';
 import { SubscriptionApiError } from './subscription.errors';
 import { isTradingLocked, type SubscriptionStatus } from './access.util';
+import { SUBSCRIPTION_PLANS, getPlanById } from './plans';
 import type { PaymentRequestEntry, PaymentRequestStatus, SubscriptionStatusResponse } from './subscription.types';
 import type { AppUserRole } from '../auth/auth.types';
-
-export const MONTHLY_PRICE_INR = 5999;
 
 interface UserAccessRow {
   role: AppUserRole;
@@ -19,6 +18,8 @@ interface PaymentRequestRow {
   user_id: string;
   utr: string;
   screenshot: string | null;
+  plan_id: string;
+  duration_days: number;
   amount_inr: string;
   status: PaymentRequestStatus;
   reviewed_by: string | null;
@@ -33,6 +34,8 @@ function toPaymentRequestEntry(row: PaymentRequestRow): PaymentRequestEntry {
     userId: row.user_id,
     utr: row.utr,
     hasScreenshot: row.screenshot !== null,
+    planId: row.plan_id,
+    durationDays: row.duration_days,
     amountInr: Number(row.amount_inr),
     status: row.status,
     reviewedBy: row.reviewed_by,
@@ -73,12 +76,16 @@ class SubscriptionService {
         trialEndDate,
         subscriptionEndDate,
       }),
-      monthlyPriceInr: MONTHLY_PRICE_INR,
+      plans: SUBSCRIPTION_PLANS,
       paymentRequests: requestsResult.rows.map(toPaymentRequestEntry),
     };
   }
 
-  async submitPaymentRequest(userId: string, utr: string, screenshot: string | null): Promise<PaymentRequestEntry> {
+  async submitPaymentRequest(userId: string, planId: string, utr: string, screenshot: string | null): Promise<PaymentRequestEntry> {
+    const plan = getPlanById(planId);
+    if (!plan) {
+      throw new SubscriptionApiError('Please select a valid plan.', 400);
+    }
     const trimmedUtr = utr?.trim();
     if (!trimmedUtr) {
       throw new SubscriptionApiError('UTR / Transaction ID is required.', 400);
@@ -96,10 +103,10 @@ class SubscriptionService {
     }
 
     const result = await pool.query<PaymentRequestRow>(
-      `INSERT INTO payment_requests (id, user_id, utr, screenshot, amount_inr)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO payment_requests (id, user_id, utr, screenshot, plan_id, duration_days, amount_inr)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [randomUUID(), userId, trimmedUtr, screenshot || null, MONTHLY_PRICE_INR],
+      [randomUUID(), userId, trimmedUtr, screenshot || null, plan.id, plan.durationDays, plan.priceInr],
     );
     return toPaymentRequestEntry(result.rows[0]);
   }

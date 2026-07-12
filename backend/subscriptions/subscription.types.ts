@@ -1,4 +1,5 @@
 import type { SubscriptionStatus } from './access.util';
+import type { SubscriptionPlan } from './plans';
 
 export type PaymentRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
@@ -7,6 +8,8 @@ export interface PaymentRequestEntry {
   userId: string;
   utr: string;
   hasScreenshot: boolean;
+  planId: string;
+  durationDays: number;
   amountInr: number;
   status: PaymentRequestStatus;
   reviewedBy: string | null;
@@ -20,7 +23,7 @@ export interface SubscriptionStatusResponse {
   trialEndDate: number | null;
   subscriptionEndDate: number | null;
   isTradingLocked: boolean;
-  monthlyPriceInr: number;
+  plans: SubscriptionPlan[];
   paymentRequests: PaymentRequestEntry[];
 }
 

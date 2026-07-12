@@ -225,9 +225,8 @@ export default function OptionChain() {
 
       {/* ── Footer note ──────────────────────────────────────────────────── */}
       <p className="text-2xs text-ink-300 text-center pb-2">
-        Data is illustrative. Not connected to any live NSE feed.
-        Option prices computed via Black-Scholes with a volatility smile model.
-        · Risk management: SL at −3% / Target at +7% of entry premium.
+        Live data via Angel One SmartAPI.
+        · Risk management (default): SL at −3% / Target at +7% of entry premium — configurable in the Risk Management tab.
       </p>
     </div>
   );

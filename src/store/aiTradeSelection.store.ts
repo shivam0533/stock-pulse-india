@@ -11,6 +11,6 @@ export interface AITradeSelectionSettings {
 }
 
 export const AI_TRADE_SELECTION_SETTINGS: AITradeSelectionSettings = {
-  minLTP: 30,
+  minLTP: 60,
   maxLTP: 120,
 };

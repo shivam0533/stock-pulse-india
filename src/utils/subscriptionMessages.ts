@@ -8,5 +8,8 @@ export function getLockedMessage(subscriptionStatus: SubscriptionStatus): string
   if (subscriptionStatus === 'TRIAL') {
     return 'Your 2-day free trial has expired.';
   }
+  if (subscriptionStatus === 'EXPIRED') {
+    return 'Subscribe to a plan to start trading.';
+  }
   return 'Your subscription has expired.';
 }

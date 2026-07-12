@@ -7,9 +7,7 @@ import { resizeImageToBase64 } from '@utils/imageResize';
 import { getLockedMessage } from '@utils/subscriptionMessages';
 import { formatDate } from '@utils/format';
 import { cn } from '@utils/cn';
-import type { SubscriptionStatusResponse } from '@/types';
-
-const MONTHLY_PRICE_INR = 5999;
+import type { SubscriptionPlan, SubscriptionStatusResponse } from '@/types';
 
 function formatCountdown(ms: number): string {
   if (ms <= 0) return 'Expired';
@@ -42,12 +40,35 @@ function QrCodeImage() {
   );
 }
 
+function PlanGrid({ plans, selectedPlanId, onSelect }: { plans: SubscriptionPlan[]; selectedPlanId: string | null; onSelect: (id: string) => void }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {plans.map((plan) => (
+        <button
+          key={plan.id}
+          type="button"
+          onClick={() => onSelect(plan.id)}
+          className={cn(
+            'rounded-xl border p-4 text-left transition-colors',
+            selectedPlanId === plan.id ? 'border-brand-400 bg-brand-400/10' : 'border-ink-600 hover:border-ink-500'
+          )}
+        >
+          <p className="text-xs uppercase tracking-wide text-ink-300">{plan.label}</p>
+          <p className="font-display text-xl font-bold text-ink-50 mt-1">₹{plan.priceInr.toLocaleString('en-IN')}</p>
+          <p className="text-2xs text-ink-400 mt-0.5">{plan.durationDays} days</p>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function Subscription() {
   const [status, setStatus] = useState<SubscriptionStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
 
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [utr, setUtr] = useState('');
   const [screenshotBase64, setScreenshotBase64] = useState<string | null>(null);
   const [screenshotFileName, setScreenshotFileName] = useState<string | null>(null);
@@ -63,6 +84,7 @@ export default function Subscription() {
     subscriptionService.getStatus()
       .then((res) => {
         setStatus(res);
+        setSelectedPlanId((current) => current ?? res.plans[0]?.id ?? null);
         // Keeps SubscriptionGate (Option Chain/Positions/Broker pages) from
         // showing a stale locked state — this page is where a user most
         // naturally checks "did my payment get approved," so sync here too.
@@ -100,13 +122,17 @@ export default function Subscription() {
 
   const handleSubmit = async () => {
     setSubmitError(null);
+    if (!selectedPlanId) {
+      setSubmitError('Please select a plan.');
+      return;
+    }
     if (!utr.trim()) {
       setSubmitError('UTR / Transaction ID is required.');
       return;
     }
     setSubmitting(true);
     try {
-      await subscriptionService.submitPaymentRequest({ utr: utr.trim(), screenshot: screenshotBase64 });
+      await subscriptionService.submitPaymentRequest({ planId: selectedPlanId, utr: utr.trim(), screenshot: screenshotBase64 });
       setSubmitted(true);
       setUtr('');
       setScreenshotBase64(null);
@@ -126,6 +152,8 @@ export default function Subscription() {
   const pendingRequest = status.paymentRequests.find((r) => r.status === 'PENDING');
   const activeUntil = status.subscriptionStatus === 'ACTIVE' ? status.subscriptionEndDate : null;
   const trialRemainingMs = status.subscriptionStatus === 'TRIAL' && status.trialEndDate ? status.trialEndDate - now : null;
+  const selectedPlan = status.plans.find((p) => p.id === selectedPlanId) ?? status.plans[0];
+  const cheapestPlan = status.plans[0];
 
   return (
     <div className="space-y-5 max-w-[720px] mx-auto">
@@ -150,7 +178,7 @@ export default function Subscription() {
             {!pendingRequest && !showPaymentForm && (
               <div className="mt-3 pt-3 border-t border-ink-600/30">
                 <Button variant="outline" size="sm" onClick={() => setShowPaymentForm(true)}>
-                  Buy Monthly Plan ₹5,999
+                  View Plans
                 </Button>
               </div>
             )}
@@ -169,13 +197,15 @@ export default function Subscription() {
           <div className="text-center py-4">
             <ShieldAlert size={28} className="text-loss mx-auto mb-3" />
             <p className="text-base font-semibold text-ink-50">{getLockedMessage(status.subscriptionStatus)}</p>
-            <p className="text-sm text-ink-300 mt-1">Purchase a Monthly Plan to continue trading.</p>
-            <p className="font-display text-2xl font-bold text-brand-300 mt-3">
-              ₹{MONTHLY_PRICE_INR.toLocaleString('en-IN')} <span className="text-sm font-normal text-ink-300">/ Month</span>
-            </p>
+            <p className="text-sm text-ink-300 mt-1">Choose a plan to continue trading.</p>
+            {cheapestPlan && (
+              <p className="font-display text-2xl font-bold text-brand-300 mt-3">
+                From ₹{cheapestPlan.priceInr.toLocaleString('en-IN')} <span className="text-sm font-normal text-ink-300">/ {cheapestPlan.label}</span>
+              </p>
+            )}
             {!pendingRequest && !showPaymentForm && (
               <Button className="mt-4" onClick={() => setShowPaymentForm(true)}>
-                Buy Monthly Plan ₹5,999
+                View Plans
               </Button>
             )}
           </div>
@@ -183,7 +213,7 @@ export default function Subscription() {
         {status.subscriptionStatus === 'ACTIVE' && !status.isTradingLocked && !pendingRequest && !showPaymentForm && (
           <div className="mt-3 pt-3 border-t border-ink-600/30">
             <Button variant="outline" size="sm" onClick={() => setShowPaymentForm(true)}>
-              Buy Monthly Plan ₹5,999
+              Renew / Upgrade Plan
             </Button>
           </div>
         )}
@@ -196,29 +226,32 @@ export default function Subscription() {
           <div className="flex-1">
             <p className="text-sm text-ink-50">Your payment request is under review.</p>
             <p className="text-xs text-ink-300 mt-0.5">
-              UTR {pendingRequest.utr} · submitted {formatDate(pendingRequest.createdAt)}
+              UTR {pendingRequest.utr} · ₹{pendingRequest.amountInr.toLocaleString('en-IN')} · submitted {formatDate(pendingRequest.createdAt)}
             </p>
           </div>
           <Badge variant="amber">Pending</Badge>
         </Card>
       )}
 
-      {/* Payment form — QR is only ever rendered inside this block, and only once the user has explicitly clicked "Buy Monthly Plan ₹5,999" above */}
+      {/* Payment form — QR is only ever rendered inside this block, and only once the user has explicitly clicked "View Plans" above */}
       {!pendingRequest && showPaymentForm && (
         <Card className="p-5 space-y-4">
           <div className="flex items-center gap-2">
             <CalendarClock size={16} className="text-ink-200" />
             <h2 className="font-display text-sm font-semibold text-ink-50">
-              {status.subscriptionStatus === 'ACTIVE' ? 'Renew early' : 'Pay via PhonePe'}
+              {status.subscriptionStatus === 'ACTIVE' ? 'Renew early' : 'Choose a plan'}
             </h2>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-5">
+          <PlanGrid plans={status.plans} selectedPlanId={selectedPlanId} onSelect={setSelectedPlanId} />
+
+          <div className="flex flex-col sm:flex-row gap-5 pt-2 border-t border-ink-600/30">
             <QrCodeImage />
             <div className="flex-1 space-y-3">
               <p className="text-xs text-ink-300">
-                Scan the QR and pay <b className="text-ink-50">₹{MONTHLY_PRICE_INR.toLocaleString('en-IN')}</b>, then
-                enter the UTR / Transaction ID from your payment below. An admin will review and activate your subscription.
+                Scan the QR and pay <b className="text-ink-50">₹{selectedPlan ? selectedPlan.priceInr.toLocaleString('en-IN') : '—'}</b> for the{' '}
+                <b className="text-ink-50">{selectedPlan?.label ?? '—'}</b> plan, then enter the UTR / Transaction ID from your payment below.
+                An admin will review and activate your subscription.
               </p>
               <Input
                 label="UTR / Transaction ID"
@@ -259,7 +292,7 @@ export default function Subscription() {
             {status.paymentRequests.map((r) => (
               <div key={r.id} className="flex items-center justify-between text-sm border-b border-ink-600/30 last:border-0 pb-2 last:pb-0">
                 <div>
-                  <p className="text-ink-100">UTR {r.utr}</p>
+                  <p className="text-ink-100">UTR {r.utr} · ₹{r.amountInr.toLocaleString('en-IN')}</p>
                   <p className="text-2xs text-ink-400">{formatDate(r.createdAt)}</p>
                 </div>
                 <Badge variant={r.status === 'APPROVED' ? 'gain' : r.status === 'REJECTED' ? 'loss' : 'amber'}>

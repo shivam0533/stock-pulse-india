@@ -6,9 +6,7 @@ import { useAuthStore } from '@store/auth.store';
 import { subscriptionService } from '@services/subscription.service';
 import { getLockedMessage } from '@utils/subscriptionMessages';
 import { ROUTES } from '@utils/constants';
-import type { SubscriptionStatus } from '@/types';
-
-const MONTHLY_PRICE_INR = 5999;
+import type { SubscriptionPlan, SubscriptionStatus } from '@/types';
 
 interface SubscriptionGateProps {
   children: ReactNode;
@@ -30,6 +28,7 @@ export function SubscriptionGate({ children }: SubscriptionGateProps) {
   const navigate = useNavigate();
   const [locked, setLocked] = useState(storeUser?.isTradingLocked ?? false);
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | undefined>(storeUser?.subscriptionStatus);
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,6 +36,7 @@ export function SubscriptionGate({ children }: SubscriptionGateProps) {
       if (cancelled) return;
       setLocked(status.isTradingLocked);
       setSubscriptionStatus(status.subscriptionStatus);
+      setPlans(status.plans);
       // Keep the rest of the app (this same check on other pages, the
       // sidebar, etc.) in sync too, instead of only this one component.
       useAuthStore.setState((s) => (s.user ? {
@@ -62,11 +62,17 @@ export function SubscriptionGate({ children }: SubscriptionGateProps) {
     <div className="max-w-md mx-auto mt-16">
       <Card className="p-8 text-center">
         <ShieldAlert size={32} className="text-loss mx-auto mb-4" />
-        <p className="text-base font-semibold text-ink-50">{getLockedMessage(subscriptionStatus ?? 'TRIAL')}</p>
-        <p className="text-sm text-ink-300 mt-1">Purchase a Monthly Plan to continue trading.</p>
-        <p className="font-display text-2xl font-bold text-brand-300 mt-4">
-          ₹{MONTHLY_PRICE_INR.toLocaleString('en-IN')} <span className="text-sm font-normal text-ink-300">/ Month</span>
-        </p>
+        <p className="text-base font-semibold text-ink-50">{getLockedMessage(subscriptionStatus ?? 'EXPIRED')}</p>
+        <p className="text-sm text-ink-300 mt-1">Choose a plan to continue trading.</p>
+        {plans.length > 0 && (
+          <div className="flex flex-col gap-1 mt-4">
+            {plans.map((plan) => (
+              <p key={plan.id} className="text-sm text-ink-200">
+                {plan.label}: <span className="font-display font-bold text-brand-300">₹{plan.priceInr.toLocaleString('en-IN')}</span>
+              </p>
+            ))}
+          </div>
+        )}
         <Button className="mt-5" fullWidth onClick={() => navigate(ROUTES.SUBSCRIPTION)}>
           Go to Subscription
         </Button>

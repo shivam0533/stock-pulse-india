@@ -6,13 +6,11 @@ import { AutoTradingStatusCard } from '@components/dashboard/AutoTradingStatusCa
 import { RiskStatusCard } from '@components/dashboard/RiskStatusCard';
 import { AccountFundsWidget } from '@components/dashboard/AccountFundsWidget';
 import { AIDashboardSection } from '@components/aiDashboard/AIDashboardSection';
-import { useAuthStore } from '@store/auth.store';
 import { useOptionTradeStore } from '@store/optionTrade.store';
 import { computeOptionTradeSummary } from '@services/optionTradeStats.service';
 import { formatINR } from '@utils/format';
 
 export default function Dashboard() {
-  const { user } = useAuthStore();
   // Individual selectors, not a destructured whole-store subscription —
   // updateLTP fires every 500ms-2s while a trade is open (optionTrade.store.ts),
   // which previously re-rendered this whole page + its child tree at that
@@ -20,13 +18,6 @@ export default function Dashboard() {
   const activeTrade = useOptionTradeStore((s) => s.activeTrade);
   const history = useOptionTradeStore((s) => s.history);
   const statsResetAt = useOptionTradeStore((s) => s.statsResetAt);
-
-  const greeting =
-    new Date().getHours() < 12
-      ? 'Good morning'
-      : new Date().getHours() < 18
-        ? 'Good afternoon'
-        : 'Good evening';
 
   const isPositionOpen = activeTrade?.status === 'OPEN';
   const unrealizedPnl = isPositionOpen
@@ -47,7 +38,7 @@ export default function Dashboard() {
         transition={{ duration: 0.3 }}
       >
         <h1 className="font-display text-2xl lg:text-3xl font-semibold text-ink-50 tracking-tight">
-          {greeting}, {user?.name?.split(' ')[0] ?? 'there'}
+          Welcome to Stock Pulse India
         </h1>
         <p className="mt-1 text-sm text-ink-200">
           Here&apos;s your trading desk at a glance.

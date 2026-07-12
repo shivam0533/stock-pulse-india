@@ -19,7 +19,7 @@ export function Footer() {
             <a href="#" className="hover:text-ink-50 transition-colors">API Docs</a>
             <a href="#" className="hover:text-ink-50 transition-colors">Privacy</a>
             <a href="#" className="hover:text-ink-50 transition-colors">Terms</a>
-            <a href="#" className="hover:text-ink-50 transition-colors">Support</a>
+            <a href="mailto:stockpulseindia1226@gmail.com" className="hover:text-ink-50 transition-colors">Support</a>
           </nav>
         </div>
 

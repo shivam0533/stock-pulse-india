@@ -12,13 +12,13 @@ export interface Paginated<T> {
   pageSize: number;
 }
 
-const SUBSCRIPTION_PERIOD_MS_AS_INTERVAL = "interval '30 days'";
-
 interface PaymentRequestJoinRow {
   id: string;
   user_id: string;
   utr: string;
   screenshot: string | null;
+  plan_id: string;
+  duration_days: number;
   amount_inr: string;
   status: PaymentRequestStatus;
   reviewed_by: string | null;
@@ -35,6 +35,8 @@ function toAdminPaymentRequestEntry(row: PaymentRequestJoinRow): AdminPaymentReq
     userId: row.user_id,
     utr: row.utr,
     hasScreenshot: row.screenshot !== null,
+    planId: row.plan_id,
+    durationDays: row.duration_days,
     amountInr: Number(row.amount_inr),
     status: row.status,
     reviewedBy: row.reviewed_by,
@@ -137,8 +139,8 @@ class AdminSubscriptionService {
   }
 
   private async getPendingRequestOrThrow(id: string) {
-    const result = await pool.query<{ id: string; user_id: string; status: PaymentRequestStatus }>(
-      'SELECT id, user_id, status FROM payment_requests WHERE id = $1',
+    const result = await pool.query<{ id: string; user_id: string; status: PaymentRequestStatus; duration_days: number }>(
+      'SELECT id, user_id, status, duration_days FROM payment_requests WHERE id = $1',
       [id],
     );
     const row = result.rows[0];
@@ -160,13 +162,14 @@ class AdminSubscriptionService {
       `UPDATE payment_requests SET status = 'APPROVED', reviewed_by = $1, reviewed_at = now() WHERE id = $2`,
       [reviewedBy, id],
     );
-    // Stacks on top of remaining time if renewed early; starts a fresh 30
-    // days if the subscription had already lapsed.
+    // Stacks on top of remaining time if renewed early; starts a fresh
+    // period (whatever the purchased plan's duration was) if the
+    // subscription had already lapsed.
     await pool.query(
       `UPDATE users SET subscription_status = 'ACTIVE',
-        subscription_end_date = GREATEST(now(), COALESCE(subscription_end_date, now())) + ${SUBSCRIPTION_PERIOD_MS_AS_INTERVAL}
-       WHERE id = $1`,
-      [request.user_id],
+        subscription_end_date = GREATEST(now(), COALESCE(subscription_end_date, now())) + ($1 || ' days')::interval
+       WHERE id = $2`,
+      [request.duration_days, request.user_id],
     );
   }
 

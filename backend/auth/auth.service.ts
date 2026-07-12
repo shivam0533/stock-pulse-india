@@ -37,8 +37,6 @@ interface UserRow {
   subscription_end_date: string | null;
 }
 
-const TRIAL_DURATION_MS = 2 * 24 * 60 * 60 * 1000;
-
 interface RequestContext {
   ipAddress?: string;
   userAgent?: string;
@@ -108,13 +106,15 @@ class AuthService {
     const passwordHash = await bcrypt.hash(input.password, 10);
     const id = randomUUID();
     const role: AppUserRole = resolveBootstrapRole(email);
-    const trialStart = new Date();
-    const trialEnd = new Date(trialStart.getTime() + TRIAL_DURATION_MS);
+    // No free trial — a new account starts locked (EXPIRED) and must pay to
+    // unlock trading, same as a lapsed paid subscription. ADMIN/SUPER_ADMIN
+    // accounts are unaffected regardless, since isTradingLocked() always
+    // returns false for those roles before it ever looks at this status.
     const result = await pool.query<UserRow>(
-      `INSERT INTO users (id, name, email, phone, password_hash, preferences, role, trial_start_date, trial_end_date, subscription_status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'TRIAL')
+      `INSERT INTO users (id, name, email, phone, password_hash, preferences, role, subscription_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'EXPIRED')
        RETURNING *`,
-      [id, input.name.trim(), email, input.phone?.trim() || null, passwordHash, JSON.stringify(DEFAULT_PREFERENCES), role, trialStart, trialEnd],
+      [id, input.name.trim(), email, input.phone?.trim() || null, passwordHash, JSON.stringify(DEFAULT_PREFERENCES), role],
     );
 
     const user = toAppUser(result.rows[0]);

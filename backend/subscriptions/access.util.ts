@@ -42,10 +42,13 @@ export function isTradingLocked(user: SubscriptionAccessFields): boolean {
  */
 export function getLockedMessage(subscriptionStatus: SubscriptionStatus): string {
   if (subscriptionStatus === 'CANCELLED') {
-    return 'Your subscription has been cancelled. Purchase a Monthly Plan to continue trading.';
+    return 'Your subscription has been cancelled. Purchase a plan to continue trading.';
   }
   if (subscriptionStatus === 'TRIAL') {
-    return 'Your 2-day free trial has expired. Purchase a Monthly Plan to continue trading.';
+    return 'Your 2-day free trial has expired. Purchase a plan to continue trading.';
   }
-  return 'Your subscription has expired. Purchase a Monthly Plan to continue trading.';
+  if (subscriptionStatus === 'EXPIRED') {
+    return 'Subscribe to a plan to start trading.';
+  }
+  return 'Your subscription has expired. Purchase a plan to continue trading.';
 }

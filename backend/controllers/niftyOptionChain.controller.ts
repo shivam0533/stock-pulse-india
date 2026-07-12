@@ -448,8 +448,14 @@ export const niftyOptionChainController = {
       const contract = await niftyOptionChainService.resolveContract(expiryRaw, strike, side);
 
       // ── Option expired ──────────────────────────────────────────────────
+      // expiryInfo.date is IST midnight at the *start* of the expiry date
+      // (see parseExpiryDate in instrumentMaster.service.ts) — the contract
+      // is still live and tradable for the entirety of that calendar day
+      // (isMarketOpen() above already confines this to 9:15 AM-3:30 PM IST),
+      // so "expired" only means the day has fully passed, i.e. one day later.
       const expiryInfo = (await niftyOptionChainService.getExpiries()).find((e) => e.raw === expiryRaw);
-      if (expiryInfo && expiryInfo.date < Date.now()) {
+      const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+      if (expiryInfo && expiryInfo.date + ONE_DAY_MS <= Date.now()) {
         sendError(res, `This NIFTY ${expiryRaw} contract has already expired.`, 400);
         return;
       }
