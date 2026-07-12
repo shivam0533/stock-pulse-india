@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { brokerController } from '../controllers/broker.controller';
 import { validateBrokerId, requireBrokerSession } from '../middleware/broker.middleware';
-import { requireAuth } from '../auth/auth.middleware';
+import { requireAuth, requireSuperAdmin } from '../auth/auth.middleware';
 import { requireActiveSubscription } from '../subscriptions/subscription.middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 
@@ -35,5 +35,10 @@ router.get('/:brokerId/trades', requireBrokerSession, asyncHandler(brokerControl
 
 router.post('/:brokerId/market-feed/connect', requireBrokerSession, asyncHandler(brokerController.connectMarketFeed));
 router.post('/:brokerId/market-feed/disconnect', requireBrokerSession, asyncHandler(brokerController.disconnectMarketFeed));
+
+// Temporary — Angel One entitlement investigation. SUPER_ADMIN-only since it
+// exercises every secure endpoint including a (deliberately unfillable)
+// placeOrder probe. Safe to remove once the provisioning question is closed.
+router.get('/:brokerId/diagnostics/entitlement-check', requireSuperAdmin, requireBrokerSession, asyncHandler(brokerController.entitlementCheck));
 
 export { router as brokerRoutes };

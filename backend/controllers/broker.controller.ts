@@ -186,4 +186,53 @@ export const brokerController = {
       handleError(res, err);
     }
   },
+
+  /**
+   * Temporary diagnostic (RBAC/entitlement investigation) — runs every
+   * secure Angel One call against the CALLER's own already-connected
+   * session and reports each one's real status/message, so a single
+   * request can show whether a rejection is isolated to getRMS or affects
+   * every trading endpoint. placeOrder is probed with a symbolToken that
+   * cannot correspond to a real tradable instrument, specifically so it
+   * cannot execute a real trade regardless of auth outcome — it can only
+   * ever fail (either on entitlement, or on Angel One's own "invalid
+   * token" validation), never fill.
+   */
+  async entitlementCheck(req: Request, res: Response): Promise<void> {
+    const broker = resolveBroker(req) as AngelOneService;
+    const results: Record<string, { ok: boolean; statusCode?: number; message?: string }> = {};
+
+    const probe = async (name: string, fn: () => Promise<unknown>) => {
+      try {
+        await fn();
+        results[name] = { ok: true };
+      } catch (err) {
+        results[name] = {
+          ok: false,
+          statusCode: hasStatusCode(err) ? err.statusCode : undefined,
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+    };
+
+    await probe('getProfile', () => broker.getProfile());
+    await probe('getRMS', () => broker.getFunds());
+    await probe('getPositions', () => broker.getPositions());
+    await probe('getHoldings', () => broker.getHoldings());
+    await probe('getOrderBook', () => broker.getOrderBook());
+    await probe('placeOrder (safe probe — invalid token, cannot fill)', () => broker.placeOrder({
+      tradingSymbol: 'DIAGNOSTIC-PROBE-INVALID',
+      symbolToken: '999999999',
+      exchange: 'NFO',
+      transactionType: 'BUY',
+      orderType: 'MARKET',
+      productType: 'INTRADAY',
+      variety: 'NORMAL',
+      quantity: 1,
+    }));
+
+    // eslint-disable-next-line no-console
+    console.log('[AngelOne][diag] entitlementCheck', { userId: req.userId, sessionId: broker.getDiagnosticId(), results });
+    sendSuccess(res, results);
+  },
 };
