@@ -84,6 +84,18 @@ interface SnapQuoteFrame {
 
 const RECONNECT_BASE_DELAY_MS = 3000;
 const RECONNECT_MAX_DELAY_MS = 60_000;
+/**
+ * Observed in production: the socket can stay open — `ws.on('close')` never
+ * fires, ping/pong keeps succeeding — while Angel One silently stops sending
+ * real SnapQuote frames, so every tick (spot price included) stays frozen at
+ * its last value indefinitely. Neither the existing close-handler reconnect
+ * nor the SSE-side safety poll can detect this "zombie" state, since both
+ * only react to an actual disconnect or re-read the same stale cached tick.
+ * NIFTY's own index ticks essentially continuously during market hours, so
+ * this long a gap with zero fresh frames is never legitimate market quiet.
+ */
+const STALE_TICK_THRESHOLD_MS = 45_000;
+const STALE_TICK_CHECK_INTERVAL_MS = 15_000;
 
 export class AngelOneWebSocketService extends EventEmitter {
   private ws: WebSocket | null = null;
@@ -99,6 +111,21 @@ export class AngelOneWebSocketService extends EventEmitter {
   private pendingNseTokens: Set<string> = new Set();
   /** Consecutive failed-connection count — drives exponential backoff so a prolonged Angel One-side outage doesn't hammer their API every few seconds forever. Reset to 0 on a successful open. */
   private reconnectAttempts = 0;
+  /** Timestamp of the last genuine SnapQuote frame (any token) — reset on every fresh `open` so a brand-new connection isn't immediately judged stale before Angel One has had a chance to send anything. 0 means "never connected yet". */
+  private lastTickAt = 0;
+
+  constructor() {
+    super();
+    setInterval(() => {
+      if (this.lastTickAt === 0 || !this.isConnected()) return;
+      const staleSinceMs = Date.now() - this.lastTickAt;
+      if (staleSinceMs > STALE_TICK_THRESHOLD_MS) {
+        // eslint-disable-next-line no-console
+        console.warn(`[AngelOneWS] no tick received in ${staleSinceMs}ms (connection looks open but Angel One has gone silent) — forcing reconnect`);
+        this.ws?.terminate(); // triggers the existing 'close' handler's reconnect/backoff logic below
+      }
+    }, STALE_TICK_CHECK_INTERVAL_MS);
+  }
 
   getTick(token: string): NiftyLiveTick | undefined {
     return this.ticks.get(token);
@@ -163,6 +190,7 @@ export class AngelOneWebSocketService extends EventEmitter {
       // eslint-disable-next-line no-console
       console.log('[Pipeline] WebSocket Connected');
       this.reconnectAttempts = 0; // back to full speed after a successful connect
+      this.lastTickAt = Date.now(); // give this fresh connection the full threshold before it can be judged stale
       this.pingInterval = setInterval(() => this.ws?.send(ANGEL_ONE_WS_PING_MESSAGE), ANGEL_ONE_WS_PING_INTERVAL_MS);
       // Subscribe to everything ever requested (this connection's first
       // caller included) — using pendingNfoTokens/pendingNseTokens, not
@@ -231,6 +259,7 @@ export class AngelOneWebSocketService extends EventEmitter {
     const token = decodeToken(frame.token);
     if (!token) return;
 
+    this.lastTickAt = Date.now();
     const rawLtp = frame.last_traded_price / WS_PRICE_SCALE;
     const prevSequence = this.lastSequenceByToken.get(token);
     const isDuplicateSequence = prevSequence !== undefined && prevSequence === frame.sequence_number;
