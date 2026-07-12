@@ -11,7 +11,7 @@ import { angelOneConfig } from '../../config/env';
 
 /** Thrown for every SmartAPI failure path so controllers can return the right HTTP status instead of a blanket 500. */
 export class AngelOneApiError extends Error {
-  constructor(message: string, public readonly statusCode: number) {
+  constructor(message: string, public readonly statusCode: number, public readonly errorCode?: string) {
     super(message);
     this.name = 'AngelOneApiError';
   }
@@ -62,10 +62,10 @@ export function unwrapAngelOneEnvelope<T>(body: AngelOneEnvelope<T>): T {
   if (body.status === false || body.success === false) {
     const errorCode = body.errorcode ?? body.errorCode;
     const statusCode = errorCode === SESSION_EXPIRED_ERROR_CODE ? 401 : 400;
-    throw new AngelOneApiError(body.message || 'SmartAPI request failed.', statusCode);
+    throw new AngelOneApiError(body.message || 'SmartAPI request failed.', statusCode, errorCode);
   }
   if (body.data === undefined || body.data === null || typeof body.data !== 'object') {
-    throw new AngelOneApiError(body.message || 'SmartAPI returned no usable data for this request.', 502);
+    throw new AngelOneApiError(body.message || 'SmartAPI returned no usable data for this request.', 502, body.errorcode ?? body.errorCode);
   }
   return body.data;
 }
@@ -75,8 +75,9 @@ function extractHttpError(err: unknown): AngelOneApiError {
     const status = err.response?.status ?? 502; // no response at all -> upstream unreachable
     const data = err.response?.data as AngelOneEnvelope<unknown> | undefined;
     const message = data?.message || err.message || 'SmartAPI request failed.';
-    const mappedStatus = data?.errorcode === SESSION_EXPIRED_ERROR_CODE ? 401 : status;
-    return new AngelOneApiError(message, mappedStatus);
+    const errorCode = data?.errorcode ?? data?.errorCode;
+    const mappedStatus = errorCode === SESSION_EXPIRED_ERROR_CODE ? 401 : status;
+    return new AngelOneApiError(message, mappedStatus, errorCode);
   }
   return new AngelOneApiError(err instanceof Error ? err.message : 'SmartAPI request failed.', 500);
 }

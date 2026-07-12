@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { brokerManagerService, type SupportedBrokerId } from '../services/brokerManager.service';
 import type { AngelOneService } from '../brokers/angelOne/angelOne.service';
+import { AngelOneApiError } from '../brokers/angelOne/angelOneHttp';
 import { ANGEL_ONE_BROKER_ID } from '../brokers/angelOne';
 import { angelOneConfig, maskKey } from '../config/env';
 import { sendSuccess, sendError } from '../utils/apiResponse';
@@ -200,26 +201,44 @@ export const brokerController = {
    */
   async entitlementCheck(req: Request, res: Response): Promise<void> {
     const broker = resolveBroker(req) as AngelOneService;
-    const results: Record<string, { ok: boolean; statusCode?: number; message?: string }> = {};
+    interface ProbeResult {
+      httpStatus: number;
+      authenticationOk: boolean; // reached Angel One at all with a valid session (not a 401)
+      authorizationOk: boolean; // Angel One granted this specific endpoint (the true pass/fail)
+      angelOneErrorCode?: string;
+      message?: string;
+      /** Field names only — never raw values (account balance, positions, etc. are never logged). */
+      responseFields?: string[];
+    }
+    const results: Record<string, ProbeResult> = {};
 
     const probe = async (name: string, fn: () => Promise<unknown>) => {
       try {
-        await fn();
-        results[name] = { ok: true };
-      } catch (err) {
+        const data = await fn();
         results[name] = {
-          ok: false,
-          statusCode: hasStatusCode(err) ? err.statusCode : undefined,
+          httpStatus: 200,
+          authenticationOk: true,
+          authorizationOk: true,
+          responseFields: data && typeof data === 'object' ? Object.keys(data) : undefined,
+        };
+      } catch (err) {
+        const statusCode = hasStatusCode(err) ? err.statusCode : 500;
+        results[name] = {
+          httpStatus: statusCode,
+          authenticationOk: statusCode !== 401,
+          authorizationOk: false,
+          angelOneErrorCode: err instanceof AngelOneApiError ? err.errorCode : undefined,
           message: err instanceof Error ? err.message : String(err),
         };
       }
     };
 
     await probe('getProfile', () => broker.getProfile());
-    await probe('getRMS', () => broker.getFunds());
+    await probe('getRMS (getFunds)', () => broker.getFunds());
     await probe('getPositions', () => broker.getPositions());
     await probe('getHoldings', () => broker.getHoldings());
     await probe('getOrderBook', () => broker.getOrderBook());
+    await probe('getTradeBook', () => broker.getTradeBook());
     await probe('placeOrder (safe probe — invalid token, cannot fill)', () => broker.placeOrder({
       tradingSymbol: 'DIAGNOSTIC-PROBE-INVALID',
       symbolToken: '999999999',
@@ -231,8 +250,9 @@ export const brokerController = {
       quantity: 1,
     }));
 
+    const summary = { userId: req.userId, sessionId: broker.getDiagnosticId(), results };
     // eslint-disable-next-line no-console
-    console.log('[AngelOne][diag] entitlementCheck', { userId: req.userId, sessionId: broker.getDiagnosticId(), results });
-    sendSuccess(res, results);
+    console.log('[AngelOne][diag] entitlementCheck', summary);
+    sendSuccess(res, summary);
   },
 };
