@@ -154,14 +154,21 @@ export async function getClientNetworkHeaders(): Promise<Record<string, string>>
   };
 }
 
-/** The 3 headers every SmartAPI call needs beyond the network ones above (verified from the official SDK's request_util). */
-export function authHeaders(accessToken?: string | null): Record<string, string> {
+/**
+ * The 3 headers every SmartAPI call needs beyond the network ones above
+ * (verified from the official SDK's request_util). `apiKey` is the calling
+ * user's own SmartAPI app key — Angel One now ties trading-data entitlement
+ * to whichever account created that key, so this can no longer default to
+ * one shared key for every user. The shared `angelOneConfig.apiKey` fallback
+ * only remains for any caller that genuinely has no per-user key yet.
+ */
+export function authHeaders(accessToken?: string | null, apiKey?: string | null): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
     'X-UserType': 'USER',
     'X-SourceID': 'WEB',
-    'X-PrivateKey': angelOneConfig.apiKey,
+    'X-PrivateKey': apiKey || angelOneConfig.apiKey,
   };
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
   return headers;

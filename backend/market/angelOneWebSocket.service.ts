@@ -2,7 +2,6 @@ import { EventEmitter } from 'events';
 import WebSocket from 'ws';
 import { Parser } from 'binary-parser';
 import { getAnyLiveAngelOneSession } from '../brokers/angelOne/angelOneSessionRegistry';
-import { angelOneConfig } from '../config/env';
 import {
   ANGEL_ONE_WS_URL,
   ANGEL_ONE_WS_PING_INTERVAL_MS,
@@ -180,7 +179,7 @@ export class AngelOneWebSocketService extends EventEmitter {
       headers: {
         'x-client-code': creds.clientCode,
         Authorization: `Bearer ${creds.jwtToken}`,
-        'x-api-key': angelOneConfig.apiKey,
+        'x-api-key': creds.apiKey,
         'x-feed-token': creds.feedToken,
       },
     });

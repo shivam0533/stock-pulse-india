@@ -3,7 +3,7 @@ import { brokerManagerService, type SupportedBrokerId } from '../services/broker
 import type { AngelOneService } from '../brokers/angelOne/angelOne.service';
 import { AngelOneApiError } from '../brokers/angelOne/angelOneHttp';
 import { ANGEL_ONE_BROKER_ID } from '../brokers/angelOne';
-import { angelOneConfig, maskKey } from '../config/env';
+import { maskKey } from '../config/env';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 
 /**
@@ -81,11 +81,12 @@ export const brokerController = {
       // (brokerMock.controller.ts) — logged before the call so the session
       // fingerprint is captured even if getFunds() itself then throws.
       if (req.params.brokerId?.toUpperCase() === ANGEL_ONE_BROKER_ID) {
+        const angelOneBroker = broker as AngelOneService;
         // eslint-disable-next-line no-console
         console.log('[AngelOne][diag] getFunds', {
           userId: req.userId,
-          apiKeyUsed: maskKey(angelOneConfig.apiKey),
-          sessionId: (broker as AngelOneService).getDiagnosticId(),
+          apiKeyUsed: maskKey(angelOneBroker.getApiKey() ?? ''),
+          sessionId: angelOneBroker.getDiagnosticId(),
         });
       }
       const funds = await broker.getFunds();

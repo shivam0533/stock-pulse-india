@@ -34,6 +34,8 @@ interface AngelOneRawSession {
   feedToken: string;
   loginTime: number; // epoch ms
   expiresAt: number; // epoch ms
+  /** This user's own SmartAPI app key, supplied at login — see AngelOneLoginRequest.apiKey. */
+  apiKey: string;
 }
 
 /**
@@ -118,18 +120,25 @@ export class AngelOneService implements IAngelOneService {
 
   /**
    * Read-only credentials the live market-data WebSocket needs to connect
-   * (x-client-code / Authorization / x-feed-token — verified from the
-   * official SDK's WebSocketV2). Returns null when not connected so callers
-   * can hold off starting/subscribing until a real session exists. Never
-   * exposed over HTTP — only consumed in-process by angelOneWebSocket.service.ts.
+   * (x-client-code / Authorization / x-feed-token / x-api-key — verified
+   * from the official SDK's WebSocketV2). Returns null when not connected so
+   * callers can hold off starting/subscribing until a real session exists.
+   * Never exposed over HTTP — only consumed in-process by
+   * angelOneWebSocket.service.ts.
    */
-  getMarketFeedCredentials(): { clientCode: string; jwtToken: string; feedToken: string } | null {
+  getMarketFeedCredentials(): { clientCode: string; jwtToken: string; feedToken: string; apiKey: string } | null {
     if (!this.session) return null;
     return {
       clientCode: this.session.clientCode,
       jwtToken: this.session.jwtToken,
       feedToken: this.session.feedToken,
+      apiKey: this.session.apiKey,
     };
+  }
+
+  /** This session's own SmartAPI app key — used by REST callers outside this class (angelOneMarketData.service.ts) that need to authenticate as "any" live user. */
+  getApiKey(): string | null {
+    return this.session?.apiKey ?? null;
   }
 
   /** True only if this instance currently holds a live, unexpired session. */
@@ -140,6 +149,9 @@ export class AngelOneService implements IAngelOneService {
   async login(credentials: AngelOneLoginRequest): Promise<AngelOneSession> {
     if (!credentials.clientCode?.trim() || !credentials.pin?.trim() || !credentials.totp?.trim()) {
       throw new AngelOneApiError('Client Code, PIN, and TOTP are all required.', 400);
+    }
+    if (!credentials.apiKey?.trim()) {
+      throw new AngelOneApiError('Your own Angel One SmartAPI App Key is required.', 400);
     }
     if (!isAngelOneConfigured()) {
       throw new AngelOneApiError('Angel One API is not configured on the server. Set ANGEL_ONE_API_KEY.', 500);
@@ -155,7 +167,7 @@ export class AngelOneService implements IAngelOneService {
         {
           url: ANGEL_ONE_ENDPOINTS.LOGIN,
           method: 'POST',
-          headers: { ...authHeaders(), ...networkHeaders },
+          headers: { ...authHeaders(undefined, credentials.apiKey), ...networkHeaders },
           // SmartAPI's own field is literally "password" — Angel One accounts
           // commonly use a numeric login PIN in that field, hence this app's
           // AngelOneLoginRequest calling it `pin`.
@@ -176,6 +188,7 @@ export class AngelOneService implements IAngelOneService {
         feedToken: tokens.feedToken,
         loginTime: now,
         expiresAt: now + ANGEL_ONE_SESSION_TTL_SECONDS * 1000,
+        apiKey: credentials.apiKey,
       };
 
       // Enrich with the account name via the real profile call — best-effort,
@@ -219,7 +232,7 @@ export class AngelOneService implements IAngelOneService {
         await requestWithRetry(this.http, {
           url: ANGEL_ONE_ENDPOINTS.LOGOUT,
           method: 'POST',
-          headers: { ...authHeaders(session.jwtToken), ...networkHeaders },
+          headers: { ...authHeaders(session.jwtToken, session.apiKey), ...networkHeaders },
           data: { clientcode: session.clientCode },
         });
       } catch (err) {
@@ -245,7 +258,7 @@ export class AngelOneService implements IAngelOneService {
       const body = await requestWithRetry<{ jwtToken: string; refreshToken: string }>(this.http, {
         url: ANGEL_ONE_ENDPOINTS.REFRESH_SESSION,
         method: 'POST',
-        headers: { ...authHeaders(this.session.jwtToken), ...networkHeaders },
+        headers: { ...authHeaders(this.session.jwtToken, this.session.apiKey), ...networkHeaders },
         data: { refreshToken: this.session.refreshToken },
       });
       const tokens = unwrapAngelOneEnvelope(body);
@@ -293,7 +306,7 @@ export class AngelOneService implements IAngelOneService {
     }>(this.http, {
       url: ANGEL_ONE_ENDPOINTS.PROFILE,
       method: 'GET',
-      headers: { ...authHeaders(token), ...networkHeaders },
+      headers: { ...authHeaders(token, this.session!.apiKey), ...networkHeaders },
     });
     const data = unwrapAngelOneEnvelope(body);
     return {
@@ -315,7 +328,7 @@ export class AngelOneService implements IAngelOneService {
     }>(this.http, {
       url: ANGEL_ONE_ENDPOINTS.FUNDS,
       method: 'GET',
-      headers: { ...authHeaders(token), ...networkHeaders },
+      headers: { ...authHeaders(token, this.session!.apiKey), ...networkHeaders },
     });
     const data = unwrapAngelOneEnvelope(body);
     const availableCash = Number(data.availablecash ?? 0);
@@ -341,7 +354,7 @@ export class AngelOneService implements IAngelOneService {
     }>>(this.http, {
       url: ANGEL_ONE_ENDPOINTS.POSITIONS,
       method: 'GET',
-      headers: { ...authHeaders(token), ...networkHeaders },
+      headers: { ...authHeaders(token, this.session!.apiKey), ...networkHeaders },
     });
     const data = unwrapAngelOneEnvelope(body) ?? [];
     return (Array.isArray(data) ? data : []).map((p) => ({
@@ -365,7 +378,7 @@ export class AngelOneService implements IAngelOneService {
     }>>(this.http, {
       url: ANGEL_ONE_ENDPOINTS.HOLDINGS,
       method: 'GET',
-      headers: { ...authHeaders(token), ...networkHeaders },
+      headers: { ...authHeaders(token, this.session!.apiKey), ...networkHeaders },
     });
     const data = unwrapAngelOneEnvelope(body) ?? [];
     return (Array.isArray(data) ? data : []).map((h) => ({
@@ -386,7 +399,7 @@ export class AngelOneService implements IAngelOneService {
       const body = await requestWithRetry<{ script: string; orderid: string; uniqueorderid: string }>(this.http, {
         url: ANGEL_ONE_ENDPOINTS.PLACE_ORDER,
         method: 'POST',
-        headers: { ...authHeaders(token), ...networkHeaders },
+        headers: { ...authHeaders(token, this.session!.apiKey), ...networkHeaders },
         data: {
           variety: order.variety,
           tradingsymbol: order.tradingSymbol,
@@ -419,7 +432,7 @@ export class AngelOneService implements IAngelOneService {
       const body = await requestWithRetry<{ orderid: string; uniqueorderid: string }>(this.http, {
         url: ANGEL_ONE_ENDPOINTS.MODIFY_ORDER,
         method: 'POST',
-        headers: { ...authHeaders(token), ...networkHeaders },
+        headers: { ...authHeaders(token, this.session!.apiKey), ...networkHeaders },
         data: {
           orderid: orderId,
           variety: updates.variety,
@@ -448,7 +461,7 @@ export class AngelOneService implements IAngelOneService {
       const body = await requestWithRetry<{ orderid: string; uniqueorderid: string }>(this.http, {
         url: ANGEL_ONE_ENDPOINTS.CANCEL_ORDER,
         method: 'POST',
-        headers: { ...authHeaders(token), ...networkHeaders },
+        headers: { ...authHeaders(token, this.session!.apiKey), ...networkHeaders },
         data: { variety: 'NORMAL', orderid: orderId },
       });
       const data = unwrapAngelOneEnvelope(body);
@@ -467,7 +480,7 @@ export class AngelOneService implements IAngelOneService {
     }>>(this.http, {
       url: ANGEL_ONE_ENDPOINTS.ORDER_BOOK,
       method: 'GET',
-      headers: { ...authHeaders(token), ...networkHeaders },
+      headers: { ...authHeaders(token, this.session!.apiKey), ...networkHeaders },
     });
     const data = unwrapAngelOneEnvelope(body) ?? [];
     return (Array.isArray(data) ? data : []).map((o) => ({
@@ -490,7 +503,7 @@ export class AngelOneService implements IAngelOneService {
     }>>(this.http, {
       url: ANGEL_ONE_ENDPOINTS.TRADE_BOOK,
       method: 'GET',
-      headers: { ...authHeaders(token), ...networkHeaders },
+      headers: { ...authHeaders(token, this.session!.apiKey), ...networkHeaders },
     });
     const data = unwrapAngelOneEnvelope(body) ?? [];
     return (Array.isArray(data) ? data : []).map((t) => ({

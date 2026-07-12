@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plug, Info, Stethoscope } from 'lucide-react';
+import { Copy, Plug, Info, Stethoscope } from 'lucide-react';
 import { Modal, Button } from '@components/ui';
 import { BrokerCard } from '@components/broker/BrokerCard';
 import { AngelOneLoginModal } from '@components/broker/AngelOneLoginModal';
 import { useBrokerConnectionStore } from '@store/brokerConnection.store';
 import { useAuthStore } from '@store/auth.store';
 import { brokerApiClient, toBrokerApiError } from '@api/brokerApiClient';
+import { angelOneSetupService, type AngelOneSetupInfo } from '@services/angelOneSetup.service';
 import { BROKERS } from '@config/brokers.config';
 import { angelOneBrokerAdapter } from '@services/broker/angelOneBrokerAdapter';
 import { zerodhaBrokerAdapter } from '@services/broker/zerodhaBrokerAdapter';
@@ -29,12 +30,42 @@ const ADAPTERS_BY_ID: Record<BrokerId, { isAuthenticated: () => boolean }> = {
   KOTAK_NEO: kotakNeoBrokerAdapter,
 };
 
+function CopyChip({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div className="flex items-center gap-2 bg-ink-800/60 border border-ink-600/60 rounded-lg px-3 py-1.5">
+      <div>
+        <div className="text-2xs text-ink-400 uppercase tracking-wide">{label}</div>
+        <div className="font-mono text-xs text-ink-50">{value}</div>
+      </div>
+      <button type="button" onClick={handleCopy} className="text-ink-300 hover:text-brand-300 transition-colors shrink-0">
+        {copied ? <span className="text-2xs text-gain">Copied</span> : <Copy size={14} />}
+      </button>
+    </div>
+  );
+}
+
 export default function BrokerIntegration() {
   const navigate = useNavigate();
   const [comingSoonOpen, setComingSoonOpen] = useState(false);
   const [angelOneModalOpen, setAngelOneModalOpen] = useState(false);
   const connections = useBrokerConnectionStore((s) => s.connections);
   const role = useAuthStore((s) => s.user?.role);
+
+  // Angel One's 2026 SEBI-compliance update ties trading-data access to
+  // whichever account registered the calling IP against its own SmartAPI
+  // app — every user now needs their own app + this server's static IP
+  // registered under it (see angelOne.service.ts). Hidden entirely until
+  // that IP actually exists (Railway Static Outbound IPs enabled).
+  const [angelOneSetup, setAngelOneSetup] = useState<AngelOneSetupInfo | null>(null);
+  useEffect(() => {
+    angelOneSetupService.getSetupInfo().then(setAngelOneSetup).catch(() => {});
+  }, []);
 
   // Temporary — Angel One RMS/entitlement investigation. One-click version
   // of the diagnostic for anyone not comfortable with the browser console.
@@ -89,6 +120,22 @@ export default function BrokerIntegration() {
           <Button size="sm" variant="secondary" loading={diagLoading} onClick={runEntitlementCheck}>
             Run Check
           </Button>
+        </div>
+      )}
+
+      {/* Angel One static-IP setup — before connecting, each account must register this server's IP under its own SmartAPI app. Hidden until Railway's static IP actually exists, and once Angel One is already connected. */}
+      {angelOneSetup?.staticIp && !connections.ANGEL_ONE && (
+        <div className="flex flex-col gap-3 px-4 py-3.5 rounded-xl border border-amber-400/30 bg-amber-400/8">
+          <p className="text-sm font-medium text-ink-50">Before connecting Angel One</p>
+          <p className="text-xs text-ink-300 leading-relaxed">
+            Angel One requires each account to register this server's IP under your own SmartAPI app
+            (<a href="https://smartapi.angelone.in" target="_blank" rel="noreferrer" className="text-brand-300 hover:underline">smartapi.angelone.in</a> → Add App → Primary Static IP),
+            then use that app's API Key when connecting below.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <CopyChip label="Primary Static IP" value={angelOneSetup.staticIp} />
+            <CopyChip label="Redirect URL" value={angelOneSetup.redirectUrl} />
+          </div>
         </div>
       )}
 

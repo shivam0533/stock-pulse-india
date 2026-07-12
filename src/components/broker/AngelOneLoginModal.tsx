@@ -1,9 +1,10 @@
-import { useState } from 'react';
-import { CheckCircle2, KeyRound, LogOut, ShieldCheck, User } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { CheckCircle2, Fingerprint, KeyRound, LogOut, ShieldCheck, User } from 'lucide-react';
 import { Modal, Button, Input } from '@components/ui';
 import { brokerApiClient, toBrokerApiError } from '@api/brokerApiClient';
 import { useBrokerConnectionStore } from '@store/brokerConnection.store';
 import { useBrokerToastStore } from '@store/brokerToast.store';
+import { angelOneSetupService, type AngelOneSetupInfo } from '@services/angelOneSetup.service';
 
 interface AngelOneLoginModalProps {
   open: boolean;
@@ -14,11 +15,12 @@ interface AngelOneLoginForm {
   clientCode: string;
   pin: string;
   totp: string;
+  apiKey: string;
 }
 
 type FormErrors = Partial<Record<keyof AngelOneLoginForm, string>>;
 
-const EMPTY_FORM: AngelOneLoginForm = { clientCode: '', pin: '', totp: '' };
+const EMPTY_FORM: AngelOneLoginForm = { clientCode: '', pin: '', totp: '', apiKey: '' };
 
 interface AngelOneLoginResponseData {
   clientCode: string;
@@ -70,6 +72,11 @@ export function AngelOneLoginModal({ open, onClose }: AngelOneLoginModalProps) {
   const setDisconnected = useBrokerConnectionStore((s) => s.setDisconnected);
   const pushToast = useBrokerToastStore((s) => s.push);
 
+  const [setupInfo, setSetupInfo] = useState<AngelOneSetupInfo | null>(null);
+  useEffect(() => {
+    if (open) angelOneSetupService.getSetupInfo().then(setSetupInfo).catch(() => {});
+  }, [open]);
+
   const patch = (key: keyof AngelOneLoginForm, value: string) => {
     setForm((f) => ({ ...f, [key]: value }));
     setErrors((e) => (e[key] ? { ...e, [key]: undefined } : e));
@@ -87,6 +94,7 @@ export function AngelOneLoginModal({ open, onClose }: AngelOneLoginModalProps) {
     if (!form.clientCode.trim()) nextErrors.clientCode = 'Client Code is required.';
     if (!form.pin.trim()) nextErrors.pin = 'PIN is required.';
     if (!form.totp.trim()) nextErrors.totp = 'TOTP is required.';
+    if (!form.apiKey.trim()) nextErrors.apiKey = 'Your own SmartAPI App Key is required.';
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -198,6 +206,29 @@ export function AngelOneLoginModal({ open, onClose }: AngelOneLoginModalProps) {
             disabled={loading}
             autoComplete="off"
           />
+          <div>
+            <Input
+              label="SmartAPI App Key"
+              placeholder="Your own Angel One SmartAPI app key"
+              leftIcon={<Fingerprint size={15} />}
+              value={form.apiKey}
+              onChange={(e) => patch('apiKey', e.target.value)}
+              error={errors.apiKey}
+              disabled={loading}
+              autoComplete="off"
+            />
+            <p className="mt-1.5 text-2xs text-ink-400 leading-snug">
+              From your own app at{' '}
+              <a href="https://smartapi.angelone.in" target="_blank" rel="noreferrer" className="text-brand-300 hover:underline">
+                smartapi.angelone.in
+              </a>
+              {setupInfo?.staticIp ? (
+                <> — register Primary Static IP <code className="text-ink-200">{setupInfo.staticIp}</code> under that app first.</>
+              ) : (
+                ' — Angel One requires each account to use its own app key with a registered static IP.'
+              )}
+            </p>
+          </div>
 
           <div className="flex gap-3 pt-1">
             <Button variant="secondary" size="sm" fullWidth onClick={handleClose} disabled={loading}>

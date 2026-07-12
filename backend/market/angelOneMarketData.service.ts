@@ -18,6 +18,13 @@ function requireAnyLiveSession() {
   return session;
 }
 
+/** This session's own SmartAPI app key must accompany its own access token — mixing one session's token with another session's (or the old shared) key is exactly the mismatch Angel One's entitlement check now rejects. */
+async function authHeadersForAnyLiveSession(): Promise<Record<string, string>> {
+  const session = requireAnyLiveSession();
+  const token = await session.getValidAccessToken();
+  return authHeaders(token, session.getApiKey());
+}
+
 interface RawQuoteEntry {
   symbolToken: string;
   ltp: number;
@@ -67,14 +74,13 @@ export class AngelOneMarketDataService {
     const result = new Map<string, NiftyRestSnapshot>();
     if (nfoTokens.length === 0) return result;
 
-    const token = await requireAnyLiveSession().getValidAccessToken();
     const http = axios.create({ baseURL: ANGEL_ONE_API_BASE_URL, timeout: 15000 });
-    const networkHeaders = await getClientNetworkHeaders();
+    const [authHeaderSet, networkHeaders] = await Promise.all([authHeadersForAnyLiveSession(), getClientNetworkHeaders()]);
 
     const body = await requestWithRetry<{ fetched?: RawQuoteEntry[]; unfetched?: RawUnfetchedEntry[] }>(http, {
       url: ANGEL_ONE_ENDPOINTS.MARKET_DATA,
       method: 'POST',
-      headers: { ...authHeaders(token), ...networkHeaders },
+      headers: { ...authHeaderSet, ...networkHeaders },
       data: { mode: 'FULL', exchangeTokens: { NFO: nfoTokens } },
     });
     const data = unwrapAngelOneEnvelope(body);
@@ -92,14 +98,13 @@ export class AngelOneMarketDataService {
   }
 
   async getIndexQuote(nseIndexToken: string): Promise<number> {
-    const token = await requireAnyLiveSession().getValidAccessToken();
     const http = axios.create({ baseURL: ANGEL_ONE_API_BASE_URL, timeout: 15000 });
-    const networkHeaders = await getClientNetworkHeaders();
+    const [authHeaderSet, networkHeaders] = await Promise.all([authHeadersForAnyLiveSession(), getClientNetworkHeaders()]);
 
     const body = await requestWithRetry<{ fetched?: RawQuoteEntry[]; unfetched?: RawUnfetchedEntry[] }>(http, {
       url: ANGEL_ONE_ENDPOINTS.MARKET_DATA,
       method: 'POST',
-      headers: { ...authHeaders(token), ...networkHeaders },
+      headers: { ...authHeaderSet, ...networkHeaders },
       data: { mode: 'LTP', exchangeTokens: { NSE: [nseIndexToken] } },
     });
     const data = unwrapAngelOneEnvelope(body);
@@ -120,16 +125,15 @@ export class AngelOneMarketDataService {
 
     const result = new Map<string, NiftyGreeks>();
     try {
-      const token = await requireAnyLiveSession().getValidAccessToken();
       const http = axios.create({ baseURL: ANGEL_ONE_API_BASE_URL, timeout: 15000 });
-      const networkHeaders = await getClientNetworkHeaders();
+      const [authHeaderSet, networkHeaders] = await Promise.all([authHeadersForAnyLiveSession(), getClientNetworkHeaders()]);
 
       const body = await requestWithRetry<{
         fetched?: Array<{ symbolToken: string; impliedVolatility?: number; delta?: number; gamma?: number; theta?: number; vega?: number }>;
       }>(http, {
         url: ANGEL_ONE_ENDPOINTS.OPTION_GREEK,
         method: 'POST',
-        headers: { ...authHeaders(token), ...networkHeaders },
+        headers: { ...authHeaderSet, ...networkHeaders },
         data: { name: 'NIFTY', expirydate: expiryRaw },
       });
       const data = unwrapAngelOneEnvelope(body);

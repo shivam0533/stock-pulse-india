@@ -4,6 +4,15 @@ export interface AngelOneLoginRequest {
   clientCode: string;
   pin: string;
   totp: string;
+  /**
+   * The end-user's OWN SmartAPI app key — Angel One's 2026 SEBI-compliance
+   * update ties full trading-data access (funds/positions/orders) to the
+   * specific account that created the app the key belongs to, so a single
+   * shared key can no longer serve every user's account. Each user creates
+   * their own app on the SmartAPI developer portal and enters that app's key
+   * here, same way they already provide their own clientCode/pin/totp.
+   */
+  apiKey: string;
 }
 
 export interface AngelOneSession {

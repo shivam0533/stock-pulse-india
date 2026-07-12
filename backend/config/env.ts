@@ -47,6 +47,20 @@ export function isAngelOneConfigured(): boolean {
   return !!angelOneConfig.apiKey;
 }
 
+/**
+ * This backend's fixed outbound IP (Railway Static Outbound IPs, once
+ * enabled) — shown to every user connecting Angel One so they can register
+ * it as their own SmartAPI app's "Primary Static IP" (Angel One's 2026
+ * SEBI-compliance rule ties full trading access to the account that
+ * registered the calling IP against its own app — see angelOne.service.ts).
+ * Empty until Static IPs is actually enabled on Railway and this is set;
+ * the setup banner (BrokerIntegration.tsx) stays hidden until then.
+ */
+export const angelOneStaticIp = process.env.ANGEL_ONE_STATIC_IP ?? '';
+
+/** This app's own public URL — shown alongside the static IP above as the "Redirect URL" Angel One's Add App form requires (unused by our direct clientCode/PIN/TOTP login flow, but still a mandatory field there). */
+export const appPublicUrl = process.env.APP_PUBLIC_URL ?? 'https://stock-pulse-india-pi.vercel.app';
+
 function parseEmailList(raw: string | undefined): Set<string> {
   return new Set(
     (raw ?? '')

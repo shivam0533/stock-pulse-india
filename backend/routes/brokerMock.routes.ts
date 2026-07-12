@@ -15,6 +15,7 @@ const router = Router();
 // expired — this route is the real broker connection surface.
 router.use(requireAuth, requireActiveSubscription);
 
+router.get('/angel-one/setup-info', asyncHandler(brokerMockController.getAngelOneSetupInfo));
 router.post('/login', asyncHandler(brokerMockController.login));
 router.post('/logout', asyncHandler(brokerMockController.logout));
 router.get('/profile', asyncHandler(brokerMockController.getProfile));

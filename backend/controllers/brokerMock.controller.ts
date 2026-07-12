@@ -3,7 +3,7 @@ import { brokerManagerService } from '../services/brokerManager.service';
 import { ANGEL_ONE_BROKER_ID } from '../brokers/angelOne';
 import type { AngelOneService } from '../brokers/angelOne/angelOne.service';
 import { AngelOneApiError } from '../brokers/angelOne/angelOneHttp';
-import { angelOneConfig, maskKey } from '../config/env';
+import { maskKey, angelOneStaticIp, appPublicUrl } from '../config/env';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 
 /**
@@ -32,9 +32,9 @@ function handleError(res: Response, err: unknown): void {
 
 export const brokerMockController = {
   async login(req: Request, res: Response): Promise<void> {
-    const { clientCode, pin, totp } = (req.body ?? {}) as Record<string, unknown>;
-    if (!clientCode || !pin || !totp) {
-      sendError(res, 'clientCode, pin, and totp are all required.', 400);
+    const { clientCode, pin, totp, apiKey } = (req.body ?? {}) as Record<string, unknown>;
+    if (!clientCode || !pin || !totp || !apiKey) {
+      sendError(res, 'clientCode, pin, totp, and apiKey are all required.', 400);
       return;
     }
     try {
@@ -43,22 +43,38 @@ export const brokerMockController = {
         clientCode: String(clientCode),
         pin: String(pin),
         totp: String(totp),
+        apiKey: String(apiKey),
       });
-      // Multi-user session isolation diagnostic — masked API key (identical
-      // for every user by design, Angel One's app key is not per-user) +
+      // Multi-user session isolation diagnostic — masked API key (now this
+      // user's OWN key, not a shared one — Angel One's 2026 entitlement
+      // rules tie trading access to whichever account created the key) +
       // userId + a non-reversible session fingerprint, so a support
       // investigation can confirm from logs alone that two different users
       // never share a session, without ever logging a real credential.
       // eslint-disable-next-line no-console
       console.log('[AngelOne][diag] login', {
         userId: req.userId,
-        apiKeyUsed: maskKey(angelOneConfig.apiKey),
+        apiKeyUsed: maskKey(String(apiKey)),
         sessionId: broker.getDiagnosticId(),
       });
       sendSuccess(res, session, 200);
     } catch (err) {
       handleError(res, err);
     }
+  },
+
+  /**
+   * Public (any authenticated app user) setup info for the per-user SmartAPI
+   * app every Angel One connection now needs — see AngelOneLoginRequest.apiKey.
+   * `staticIp` is empty until Static Outbound IPs is actually enabled on
+   * Railway and ANGEL_ONE_STATIC_IP is set; the frontend banner stays
+   * hidden in that case rather than showing an incomplete/misleading setup.
+   */
+  async getAngelOneSetupInfo(_req: Request, res: Response): Promise<void> {
+    sendSuccess(res, {
+      staticIp: angelOneStaticIp || null,
+      redirectUrl: appPublicUrl,
+    });
   },
 
   async logout(req: Request, res: Response): Promise<void> {
