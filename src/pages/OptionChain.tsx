@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
 import { BarChart2 } from 'lucide-react';
@@ -36,6 +36,17 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'risk-management', label: 'Risk Management' },
 ];
 
+/** Ticks every second on its own (via the caller's `now`) rather than only re-rendering when a new tick arrives — so a quiet feed (market closed, no price movement) visibly counts up instead of looking frozen at a stale clock-time. */
+function formatRelativeUpdate(updatedAt: number, now: number): string {
+  const diffSec = Math.max(0, Math.floor((now - updatedAt) / 1000));
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ${diffSec % 60}s ago`;
+  return new Intl.DateTimeFormat('en-IN', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).format(updatedAt);
+}
+
 export default function OptionChain() {
   const [activeTab, setActiveTab]     = useState<TabKey>('option-chain');
   const [filters, setFilters]         = useState<OptionChainFilter>(DEFAULT_FILTERS);
@@ -43,6 +54,16 @@ export default function OptionChain() {
   const queryClient  = useQueryClient();
 
   const { data, isLoading, isFetching } = useOptionChain(filters.expiryIndex);
+
+  // Drives the "Last Updated" display below so it visibly ticks every
+  // second on its own, instead of only re-rendering when a new SSE tick
+  // actually arrives (which stops during closed market hours or a quiet
+  // feed, making the timestamp look frozen even though it's accurate).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // Real, live NIFTY expiry list (Angel One instrument master) — re-checked
   // every minute so it stays correct if the app is left open across a day
@@ -102,9 +123,7 @@ export default function OptionChain() {
               <span className="ml-2 text-ink-300">
                 · Last Updated:{' '}
                 <span className="font-mono font-semibold text-ink-50 tabular-nums">
-                  {new Intl.DateTimeFormat('en-IN', {
-                    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-                  }).format(new Date(data.updatedAt))}
+                  {formatRelativeUpdate(data.updatedAt, now)}
                 </span>
               </span>
             )}
