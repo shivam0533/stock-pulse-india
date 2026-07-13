@@ -34,7 +34,17 @@ export function useTrailingStopEngine() {
       peakLtpRef.current = peak;
 
       const trailingSL = peak * (1 - trailingStopPercent / 100);
-      if (trailingSL > trade.stopLoss) {
+      // Bug fix: on the very first check after entry, `peak` defaults to
+      // entryPrice (or barely above it from normal noise) even if the trade
+      // hasn't moved favorably at all — trailingSL then computes to
+      // entryPrice minus trailingStopPercent, which is ALWAYS tighter than
+      // a wider configured stopLoss (e.g. 5%) and so immediately overrode
+      // it with zero real profit locked in. That's exactly the "stopped
+      // out ~2% instantly, right after entry" behavior users were hitting.
+      // Only ever raise the stop once the trailed level would sit at
+      // breakeven (entry price) or better, so trailing can never tighten
+      // the stop into a loss the user never actually reached.
+      if (trailingSL >= trade.entryPrice && trailingSL > trade.stopLoss) {
         useOptionTradeStore.getState().raiseStopLoss(trailingSL);
       }
     }, CHECK_INTERVAL_MS);
