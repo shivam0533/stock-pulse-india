@@ -49,7 +49,7 @@ export default function Dashboard() {
       <section className="grid grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
         <StatCard
           label="Today's Option P&L"
-          value={`${livePnlPositive ? '+' : ''}${formatINR(livePnl, { compact: true })}`}
+          value={`${livePnlPositive ? '+' : ''}${formatINR(livePnl)}`}
           icon={livePnlPositive ? TrendingUp : TrendingDown}
           accent={livePnlPositive ? 'gain' : 'loss'}
           caption="Current Trading Profit/Loss"
@@ -65,7 +65,7 @@ export default function Dashboard() {
         />
         <StatCard
           label="Margin Used"
-          value={formatINR(marginUsed, { compact: true })}
+          value={formatINR(marginUsed)}
           icon={Landmark}
           accent="neutral"
           caption="Capital Currently Deployed"
