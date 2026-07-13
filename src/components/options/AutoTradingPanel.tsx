@@ -271,7 +271,7 @@ export function AutoTradingPanel() {
             label="Max Trades / Day"
             value={draft.maxTradesPerDay}
             onChange={(v) => setDraft((d) => ({ ...d, maxTradesPerDay: v }))}
-            max={10}
+            max={50}
           />
           <NumberField
             label="Max Daily Loss"
