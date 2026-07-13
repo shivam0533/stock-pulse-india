@@ -9,6 +9,10 @@ export interface AdminUserSummary {
   panVerified: boolean;
   role: UserRole;
   joinedAt: number;
+  /** Only populated by listUsers() (server-enriched per page) — absent from getUser()/searchSupport(). */
+  brokerConnected?: boolean;
+  todayTradeCount?: number;
+  todayPnlAmount?: number;
 }
 
 export interface AdminDashboardStats {
@@ -16,6 +20,20 @@ export interface AdminDashboardStats {
   newSignupsToday: number;
   kycVerifiedUsers: number;
   adminActionsToday: number;
+  usersTradedToday: number;
+  totalTradesToday: number;
+  brokerConnectedUsers: number;
+  brokerDisconnectedUsers: number;
+  totalRevenue: number;
+}
+
+export interface AdminUserActivity {
+  brokerConnected: boolean;
+  todayTradeCount: number;
+  todayPnlAmount: number;
+  overallTradeCount: number;
+  overallPnlAmount: number;
+  recentTrades: AdminTradeEntry[];
 }
 
 export interface LoginLogEntry {

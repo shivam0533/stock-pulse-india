@@ -2,9 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { pool } from '../db/pool';
 import { AdminApiError } from './admin.errors';
 import { getPublicSettings, setSetting, APP_SETTING_KEYS } from '../services/appSettings.service';
+import { hasLiveAngelOneSession, countLiveAngelOneSessions } from '../brokers/angelOne/angelOneSessionRegistry';
 import type {
   AdminUserSummary, AdminDashboardStats, LoginLogEntry, AdminLogEntry, AdminNotificationEntry, NotificationType,
-  AdminTradeEntry, TradeStats,
+  AdminTradeEntry, TradeStats, AdminUserActivity,
 } from './admin.types';
 
 export interface Paginated<T> {
@@ -51,17 +52,31 @@ class AdminService {
   }
 
   async getDashboardStats(): Promise<AdminDashboardStats> {
-    const [totalUsers, newSignupsToday, kycVerifiedUsers, adminActionsToday] = await Promise.all([
+    const [totalUsers, newSignupsToday, kycVerifiedUsers, adminActionsToday, todayTrades, revenue] = await Promise.all([
       pool.query<{ count: string }>('SELECT COUNT(*) FROM users'),
       pool.query<{ count: string }>(`SELECT COUNT(*) FROM users WHERE joined_at >= date_trunc('day', now())`),
       pool.query<{ count: string }>(`SELECT COUNT(*) FROM users WHERE kyc_status = 'verified'`),
       pool.query<{ count: string }>(`SELECT COUNT(*) FROM admin_logs WHERE created_at >= date_trunc('day', now())`),
+      // Phase 2 — real (non-paper) trades only, so this reflects actual platform trading activity, not practice runs.
+      pool.query<{ users_traded: string; total_trades: string }>(
+        `SELECT COUNT(DISTINCT user_id)::text AS users_traded, COUNT(*)::text AS total_trades
+         FROM trades WHERE is_paper = false AND exit_time >= date_trunc('day', now())`,
+      ),
+      pool.query<{ total: string }>(
+        `SELECT COALESCE(SUM(amount_inr), 0)::text AS total FROM payment_requests WHERE status = 'APPROVED'`,
+      ),
     ]);
+    const brokerConnectedUsers = countLiveAngelOneSessions();
     return {
       totalUsers: Number(totalUsers.rows[0].count),
       newSignupsToday: Number(newSignupsToday.rows[0].count),
       kycVerifiedUsers: Number(kycVerifiedUsers.rows[0].count),
       adminActionsToday: Number(adminActionsToday.rows[0].count),
+      usersTradedToday: Number(todayTrades.rows[0].users_traded),
+      totalTradesToday: Number(todayTrades.rows[0].total_trades),
+      brokerConnectedUsers,
+      brokerDisconnectedUsers: Math.max(0, Number(totalUsers.rows[0].count) - brokerConnectedUsers),
+      totalRevenue: Number(revenue.rows[0].total),
     };
   }
 
@@ -90,7 +105,77 @@ class AdminService {
       dataParams,
     );
 
-    return { items: result.rows.map(toUserSummary), total, page, pageSize };
+    const items = await this.enrichWithTodayActivity(result.rows.map(toUserSummary));
+    return { items, total, page, pageSize };
+  }
+
+  /**
+   * Phase 2 — adds brokerConnected (live in-memory session registry, not a
+   * DB column) and today's real-trade count/P&L (one aggregate query for
+   * every user id on this page, not one query per row) to an already-loaded
+   * page of users.
+   */
+  private async enrichWithTodayActivity(users: AdminUserSummary[]): Promise<AdminUserSummary[]> {
+    if (users.length === 0) return users;
+    const ids = users.map((u) => u.id);
+    const todayAgg = await pool.query<{ user_id: string; count: string; pnl: string }>(
+      `SELECT user_id, COUNT(*)::text AS count, COALESCE(SUM(pnl_amount), 0)::text AS pnl
+       FROM trades
+       WHERE user_id = ANY($1) AND is_paper = false AND exit_time >= date_trunc('day', now())
+       GROUP BY user_id`,
+      [ids],
+    );
+    const byUserId = new Map(todayAgg.rows.map((r) => [r.user_id, r]));
+    return users.map((u) => ({
+      ...u,
+      brokerConnected: hasLiveAngelOneSession(u.id),
+      todayTradeCount: Number(byUserId.get(u.id)?.count ?? 0),
+      todayPnlAmount: Number(byUserId.get(u.id)?.pnl ?? 0),
+    }));
+  }
+
+  /** Single-user detail (UserDetail.tsx's "Coming soon (Phase 2)" card) — broker status, today + overall real-trade stats, and the 10 most recent trades. */
+  async getUserActivity(userId: string): Promise<AdminUserActivity> {
+    const [todayAgg, overallAgg, recent] = await Promise.all([
+      pool.query<{ count: string; pnl: string }>(
+        `SELECT COUNT(*)::text AS count, COALESCE(SUM(pnl_amount), 0)::text AS pnl
+         FROM trades WHERE user_id = $1 AND is_paper = false AND exit_time >= date_trunc('day', now())`,
+        [userId],
+      ),
+      pool.query<{ count: string; pnl: string }>(
+        `SELECT COUNT(*)::text AS count, COALESCE(SUM(pnl_amount), 0)::text AS pnl
+         FROM trades WHERE user_id = $1 AND is_paper = false`,
+        [userId],
+      ),
+      pool.query<{
+        id: string; strike: string; side: 'CE' | 'PE'; expiry: string; entry_price: string; exit_price: string;
+        quantity: number; investment: string; pnl_amount: string; pnl_percent: string;
+        exit_kind: string; is_paper: boolean; entry_time: string; exit_time: string;
+      }>(
+        `SELECT id, strike, side, expiry, entry_price, exit_price, quantity, investment,
+                pnl_amount, pnl_percent, exit_kind, is_paper, entry_time, exit_time
+         FROM trades WHERE user_id = $1
+         ORDER BY exit_time DESC LIMIT 10`,
+        [userId],
+      ),
+    ]);
+
+    const user = await this.getUserById(userId);
+    return {
+      brokerConnected: hasLiveAngelOneSession(userId),
+      todayTradeCount: Number(todayAgg.rows[0]?.count ?? 0),
+      todayPnlAmount: Number(todayAgg.rows[0]?.pnl ?? 0),
+      overallTradeCount: Number(overallAgg.rows[0]?.count ?? 0),
+      overallPnlAmount: Number(overallAgg.rows[0]?.pnl ?? 0),
+      recentTrades: recent.rows.map((r) => ({
+        id: r.id, userId, userName: user?.name ?? '', userEmail: user?.email ?? '',
+        strike: Number(r.strike), side: r.side, expiry: r.expiry,
+        entryPrice: Number(r.entry_price), exitPrice: Number(r.exit_price), quantity: r.quantity,
+        investment: Number(r.investment), pnlAmount: Number(r.pnl_amount), pnlPercent: Number(r.pnl_percent),
+        exitKind: r.exit_kind, isPaper: r.is_paper,
+        entryTime: new Date(r.entry_time).getTime(), exitTime: new Date(r.exit_time).getTime(),
+      })),
+    };
   }
 
   async getUserById(id: string): Promise<AdminUserSummary | null> {

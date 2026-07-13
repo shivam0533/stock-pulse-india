@@ -91,7 +91,7 @@ export default function AdminSettingsPage() {
 
           <Card className="p-5 space-y-4">
             <h3 className="font-display text-sm font-semibold text-ink-50">Risk Defaults</h3>
-            <p className="text-xs text-ink-400">Stored for reference — not yet auto-applied to new accounts' Risk Settings (Phase 2).</p>
+            <p className="text-xs text-ink-400">Applied automatically to every brand-new browser's Risk Settings — never overwrites a user who has already customized theirs.</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-ink-300 mb-1">Default Max Loss %</label>

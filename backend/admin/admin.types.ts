@@ -9,6 +9,10 @@ export interface AdminUserSummary {
   panVerified: boolean;
   role: AppUserRole;
   joinedAt: number;
+  /** Phase 2 — only populated by listUsers() (a live in-memory + trades-table join for the current page); absent from getUserById()/searchSupport(). */
+  brokerConnected?: boolean;
+  todayTradeCount?: number;
+  todayPnlAmount?: number;
 }
 
 export interface AdminDashboardStats {
@@ -16,6 +20,21 @@ export interface AdminDashboardStats {
   newSignupsToday: number;
   kycVerifiedUsers: number;
   adminActionsToday: number;
+  usersTradedToday: number;
+  totalTradesToday: number;
+  brokerConnectedUsers: number;
+  brokerDisconnectedUsers: number;
+  /** Sum of every APPROVED payment_request — real money actually received, not the theoretical plan price. */
+  totalRevenue: number;
+}
+
+export interface AdminUserActivity {
+  brokerConnected: boolean;
+  todayTradeCount: number;
+  todayPnlAmount: number;
+  overallTradeCount: number;
+  overallPnlAmount: number;
+  recentTrades: AdminTradeEntry[];
 }
 
 export interface LoginLogEntry {

@@ -1,19 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, ShieldCheck, User as UserIcon } from 'lucide-react';
+import { ArrowLeft, Check, ClipboardList, ShieldCheck, User as UserIcon } from 'lucide-react';
 import { Card, Badge, Avatar, Button } from '@components/ui';
 import { AdminPageHeader } from '@components/admin/AdminPageHeader';
 import { RoleBadge } from '@components/admin/RoleBadge';
 import { adminService } from '@services/admin.service';
 import { useAuthStore } from '@store/auth.store';
-import { formatDate } from '@utils/format';
-import type { AdminUserSummary, UserRole } from '@/types';
-
-const PHASE_2_FIELDS = [
-  'Current Margin', 'Available Margin', "Today's P&L", 'Overall P&L', "Today's Trades",
-  'Trade History', 'Open Positions', 'Risk Settings', 'Auto Trading Status',
-  'Login History', 'Recent Activity', 'Device Information', 'IP Address',
-];
+import { formatDate, formatTime, formatIndianNumber } from '@utils/format';
+import { cn } from '@utils/cn';
+import type { AdminUserSummary, AdminUserActivity, UserRole } from '@/types';
 
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: 'user', label: 'User' },
@@ -89,10 +84,13 @@ export default function AdminUserDetail() {
   const navigate = useNavigate();
   const [user, setUser] = useState<AdminUserSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activity, setActivity] = useState<AdminUserActivity | null>(null);
+  const [activityError, setActivityError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
     adminService.getUser(id).then(setUser).catch((err) => setError(err.message ?? 'User not found'));
+    adminService.getUserActivity(id).then(setActivity).catch((err) => setActivityError(err.message ?? 'Failed to load activity'));
   }, [id]);
 
   return (
@@ -150,17 +148,71 @@ export default function AdminUserDetail() {
           <ManageRoleCard user={user} onRoleChanged={setUser} />
 
           <Card className="p-5">
-            <h3 className="font-display text-sm font-semibold text-ink-50 mb-1">Coming soon (Phase 2)</h3>
-            <p className="text-xs text-ink-300 mb-3">
-              Needs a per-user trades table and per-user broker sessions — not shown as fake data.
-            </p>
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
-              {PHASE_2_FIELDS.map((label) => (
-                <div key={label} className="bg-ink-700/30 border border-ink-600/40 rounded-xl px-3 py-2.5 text-xs text-ink-300">
-                  {label}
+            <h3 className="font-display text-sm font-semibold text-ink-50 mb-3">Trading Activity</h3>
+            {activityError ? (
+              <p className="text-xs text-loss">{activityError}</p>
+            ) : !activity ? (
+              <p className="text-xs text-ink-300">Loading…</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+                  <div className="bg-ink-700/30 border border-ink-600/40 rounded-xl px-3 py-2.5">
+                    <div className="text-2xs text-ink-400 uppercase tracking-wide">Broker</div>
+                    <Badge variant={activity.brokerConnected ? 'gain' : 'default'} className="mt-1">
+                      {activity.brokerConnected ? 'Connected' : 'Disconnected'}
+                    </Badge>
+                  </div>
+                  <div className="bg-ink-700/30 border border-ink-600/40 rounded-xl px-3 py-2.5">
+                    <div className="text-2xs text-ink-400 uppercase tracking-wide">Today's Trades</div>
+                    <div className="font-mono text-sm text-ink-50 mt-1 tabular-nums">{activity.todayTradeCount}</div>
+                  </div>
+                  <div className="bg-ink-700/30 border border-ink-600/40 rounded-xl px-3 py-2.5">
+                    <div className="text-2xs text-ink-400 uppercase tracking-wide">Today's P&amp;L</div>
+                    <div className={cn('font-mono text-sm mt-1 tabular-nums', activity.todayPnlAmount >= 0 ? 'text-gain' : 'text-loss')}>
+                      {activity.todayPnlAmount >= 0 ? '+' : ''}₹{formatIndianNumber(activity.todayPnlAmount, 0)}
+                    </div>
+                  </div>
+                  <div className="bg-ink-700/30 border border-ink-600/40 rounded-xl px-3 py-2.5">
+                    <div className="text-2xs text-ink-400 uppercase tracking-wide">Total Trades</div>
+                    <div className="font-mono text-sm text-ink-50 mt-1 tabular-nums">{activity.overallTradeCount}</div>
+                  </div>
+                  <div className="bg-ink-700/30 border border-ink-600/40 rounded-xl px-3 py-2.5">
+                    <div className="text-2xs text-ink-400 uppercase tracking-wide">Overall P&amp;L</div>
+                    <div className={cn('font-mono text-sm mt-1 tabular-nums', activity.overallPnlAmount >= 0 ? 'text-gain' : 'text-loss')}>
+                      {activity.overallPnlAmount >= 0 ? '+' : ''}₹{formatIndianNumber(activity.overallPnlAmount, 0)}
+                    </div>
+                  </div>
                 </div>
-              ))}
-            </div>
+
+                <div className="mt-5 pt-4 border-t border-ink-600/30">
+                  <h4 className="font-display text-xs font-semibold text-ink-100 mb-2 flex items-center gap-1.5">
+                    <ClipboardList size={13} className="text-brand-300" /> Recent Trades
+                  </h4>
+                  {activity.recentTrades.length === 0 ? (
+                    <p className="text-xs text-ink-300">No trades yet.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {activity.recentTrades.map((t) => {
+                        const profit = t.pnlAmount >= 0;
+                        return (
+                          <div key={t.id} className="flex items-center justify-between text-xs border-b border-ink-600/20 last:border-0 pb-1.5 last:pb-0">
+                            <span className="text-ink-200">
+                              {formatIndianNumber(t.strike, 0)} <span className={t.side === 'CE' ? 'text-loss' : 'text-gain'}>{t.side}</span>
+                              {' · '}
+                              <span className="text-ink-400">{formatDate(t.exitTime)} {formatTime(t.exitTime)}</span>
+                              {t.isPaper && <Badge variant="default" className="ml-1.5">Paper</Badge>}
+                            </span>
+                            <span className={cn('font-mono tabular-nums', profit ? 'text-gain' : 'text-loss')}>
+                              {profit ? '+' : ''}₹{formatIndianNumber(t.pnlAmount, 0)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </Card>
         </>
       )}

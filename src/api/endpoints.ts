@@ -37,6 +37,7 @@ export const ENDPOINTS = {
     dashboard: '/admin/dashboard',
     users: '/admin/users',
     user: (id: string) => `/admin/users/${id}`,
+    userActivity: (id: string) => `/admin/users/${id}/activity`,
     userRole: (id: string) => `/admin/users/${id}/role`,
     supportSearch: '/admin/support/search',
     loginLogs: '/admin/logs/login',

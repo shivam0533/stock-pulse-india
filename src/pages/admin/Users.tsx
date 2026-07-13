@@ -8,7 +8,7 @@ import { AdminSearchBar } from '@components/admin/AdminSearchBar';
 import { AdminPagination } from '@components/admin/AdminPagination';
 import { RoleBadge } from '@components/admin/RoleBadge';
 import { adminService, type ListUsersParams } from '@services/admin.service';
-import { formatDate } from '@utils/format';
+import { formatDate, formatIndianNumber } from '@utils/format';
 import { cn } from '@utils/cn';
 import type { AdminUserSummary } from '@/types';
 
@@ -158,12 +158,21 @@ export default function AdminUsers() {
                     <td className="px-4 py-3 text-sm text-ink-50 font-medium whitespace-nowrap">{u.name}</td>
                     <td className="px-4 py-3 text-sm text-ink-200 hidden md:table-cell whitespace-nowrap">{u.phone ?? '—'}</td>
                     <td className="px-4 py-3 text-sm text-ink-200 whitespace-nowrap">{u.email}</td>
-                    <td className="px-4 py-3 text-center hidden lg:table-cell"><span className="text-2xs text-ink-400">Phase 2</span></td>
+                    <td className="px-4 py-3 text-center hidden lg:table-cell">
+                      <Badge variant={u.brokerConnected ? 'gain' : 'default'}>{u.brokerConnected ? 'Connected' : 'Disconnected'}</Badge>
+                    </td>
                     <td className="px-4 py-3 text-center">
                       <Badge variant={KYC_BADGE[u.kycStatus]}>{u.kycStatus}</Badge>
                     </td>
-                    <td className="px-4 py-3 text-center hidden lg:table-cell"><span className="text-2xs text-ink-400">Phase 2</span></td>
-                    <td className="px-4 py-3 text-right hidden lg:table-cell"><span className="text-2xs text-ink-400">Phase 2</span></td>
+                    <td className="px-4 py-3 text-center hidden lg:table-cell font-mono text-xs text-ink-100 tabular-nums">
+                      {u.todayTradeCount ?? 0}
+                    </td>
+                    <td className={cn(
+                      'px-4 py-3 text-right hidden lg:table-cell font-mono text-xs tabular-nums',
+                      (u.todayPnlAmount ?? 0) >= 0 ? 'text-gain' : 'text-loss',
+                    )}>
+                      {(u.todayPnlAmount ?? 0) >= 0 ? '+' : ''}₹{formatIndianNumber(u.todayPnlAmount ?? 0, 0)}
+                    </td>
                     <td className="px-4 py-3 text-center"><RoleBadge role={u.role} /></td>
                     <td className={cn('px-4 py-3 text-xs text-ink-300 whitespace-nowrap')}>{formatDate(u.joinedAt)}</td>
                   </motion.tr>

@@ -74,6 +74,19 @@ export const adminController = {
     }
   },
 
+  async getUserActivity(req: Request, res: Response): Promise<void> {
+    try {
+      if (!UUID_PATTERN.test(req.params.id)) {
+        sendError(res, 'Invalid user id.', 400);
+        return;
+      }
+      const activity = await adminService.getUserActivity(req.params.id);
+      sendSuccess(res, activity);
+    } catch (err) {
+      handleError(res, err);
+    }
+  },
+
   async updateUserRole(req: Request, res: Response): Promise<void> {
     try {
       if (!UUID_PATTERN.test(req.params.id)) {

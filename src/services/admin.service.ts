@@ -3,7 +3,7 @@ import { ENDPOINTS } from '@api/endpoints';
 import type {
   AdminUserSummary, AdminDashboardStats, LoginLogEntry, AdminLogEntry,
   AdminNotificationEntry, AdminNotificationType, AdminSettings, UserRole,
-  AdminTradeEntry, TradeStats,
+  AdminTradeEntry, TradeStats, AdminUserActivity,
 } from '@/types';
 
 /** Server-side-paginated result shape every /api/admin/* list endpoint returns. */
@@ -35,6 +35,11 @@ export const adminService = {
 
   async getUser(id: string): Promise<AdminUserSummary> {
     const { data } = await apiClient.get<AdminUserSummary>(ENDPOINTS.admin.user(id));
+    return data;
+  },
+
+  async getUserActivity(id: string): Promise<AdminUserActivity> {
+    const { data } = await apiClient.get<AdminUserActivity>(ENDPOINTS.admin.userActivity(id));
     return data;
   },
 

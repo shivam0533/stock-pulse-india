@@ -59,9 +59,9 @@ function SummaryStrip({ trades }: { trades: CompletedOptionTrade[] }) {
     { label: 'Win Rate',      value: `${s.winRatePercent.toFixed(1)}%`,                     color: 'text-gain'      },
     { label: 'Wins',          value: String(s.winningTrades),                               color: 'text-gain'      },
     { label: 'Losses',        value: String(s.losingTrades),                                color: 'text-loss'      },
-    { label: 'Gross Profit',  value: formatINR(s.grossProfit, { compact: true }),            color: 'text-gain'      },
-    { label: 'Gross Loss',    value: formatINR(s.grossLoss, { compact: true }),               color: 'text-loss'      },
-    { label: 'Net P&L',       value: `${pos ? '+' : ''}${formatINR(s.netPnlAmount, { compact: true })}`, color: pos ? 'text-gain' : 'text-loss' },
+    { label: 'Gross Profit',  value: formatINR(s.grossProfit),            color: 'text-gain'      },
+    { label: 'Gross Loss',    value: formatINR(s.grossLoss),               color: 'text-loss'      },
+    { label: 'Net P&L',       value: `${pos ? '+' : ''}${formatINR(s.netPnlAmount)}`, color: pos ? 'text-gain' : 'text-loss' },
     { label: 'Avg Win',       value: `+₹${formatIndianNumber(s.avgProfitPerWin, 0)}`,        color: 'text-gain'      },
     { label: 'Avg Loss',      value: `-₹${formatIndianNumber(s.avgLossPerLoss, 0)}`,         color: 'text-loss'      },
   ];

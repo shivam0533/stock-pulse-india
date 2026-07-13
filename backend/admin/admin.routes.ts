@@ -17,6 +17,7 @@ router.get('/dashboard', asyncHandler(adminController.getDashboard));
 
 router.get('/users', asyncHandler(adminController.listUsers));
 router.get('/users/:id', asyncHandler(adminController.getUser));
+router.get('/users/:id/activity', asyncHandler(adminController.getUserActivity));
 // SUPER_ADMIN only — changing a user's role is the "manage admins" capability.
 router.put('/users/:id/role', requireSuperAdmin, asyncHandler(adminController.updateUserRole));
 

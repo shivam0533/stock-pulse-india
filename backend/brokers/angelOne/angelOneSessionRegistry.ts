@@ -41,3 +41,17 @@ export function getAnyLiveAngelOneSession(): AngelOneService | null {
   }
   return null;
 }
+
+/** Read-only broker-connected check for the Admin Panel (Users list/detail, Dashboard) — never creates a session, unlike getOrCreateAngelOneSession(). */
+export function hasLiveAngelOneSession(userId: string): boolean {
+  return sessions.get(userId)?.hasSession() ?? false;
+}
+
+/** Count of users with a currently-live Angel One session — Admin Dashboard's "Broker Connected Users" stat. */
+export function countLiveAngelOneSessions(): number {
+  let count = 0;
+  for (const service of sessions.values()) {
+    if (service.hasSession()) count += 1;
+  }
+  return count;
+}
