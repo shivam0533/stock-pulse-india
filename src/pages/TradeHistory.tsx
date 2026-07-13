@@ -1,13 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle, ArrowDownUp, CheckCircle2, ChevronLeft, ChevronRight,
-  ClipboardList, Clock, Download, RadioTower, Search, Shield, SlidersHorizontal, Trash2, X,
+  ClipboardList, Clock, Download, Search, Shield, SlidersHorizontal, Trash2, X,
 } from 'lucide-react';
 import { Card } from '@components/ui';
 import { useOptionTradeStore } from '@store/optionTrade.store';
-import { useBrokerConnectionStore } from '@store/brokerConnection.store';
-import { brokerApiClient, toBrokerApiError } from '@api/brokerApiClient';
 import { computeOptionTradeSummary } from '@services/optionTradeStats.service';
 import { formatINR, formatIndianNumber, formatDate, formatTime } from '@utils/format';
 import { cn } from '@utils/cn';
@@ -77,95 +75,6 @@ function SummaryStrip({ trades }: { trades: CompletedOptionTrade[] }) {
         </div>
       ))}
     </div>
-  );
-}
-
-// ── Live broker trade book (today) ──────────────────────────────────────────
-// Trade History above reads only from THIS BROWSER's local storage — a real
-// trade placed from a different device never shows up here, since nothing
-// about it is synced anywhere. This section instead asks Angel One directly
-// for its own trade book (GET /api/broker/tradebook), which is the broker's
-// real, server-side record of every fill today — the same regardless of
-// which device/browser placed the order. Angel One's trade book is itself
-// a same-day book (it resets daily), so no client-side date filtering is
-// needed here.
-interface LiveBrokerTrade {
-  tradeId: string;
-  orderId: string;
-  tradingSymbol: string;
-  transactionType: 'BUY' | 'SELL';
-  quantity: number;
-  price: number;
-  tradeTime: string;
-}
-
-function LiveBrokerTradesCard() {
-  const connected = useBrokerConnectionStore((s) => !!s.connections.ANGEL_ONE);
-  const [trades, setTrades] = useState<LiveBrokerTrade[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!connected) { setTrades(null); setError(null); return; }
-    setLoading(true);
-    setError(null);
-    brokerApiClient.get<{ success: boolean; data: LiveBrokerTrade[] }>('/broker/tradebook')
-      .then((res) => setTrades(res.data.data ?? []))
-      .catch((err) => setError(toBrokerApiError(err).message))
-      .finally(() => setLoading(false));
-  }, [connected]);
-
-  if (!connected) return null;
-
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <RadioTower size={15} className="text-brand-300" />
-        <h2 className="font-display text-sm font-semibold text-ink-50">Live Broker Trades (Today)</h2>
-        <span className="text-2xs text-ink-400">— straight from Angel One, same on every device</span>
-      </div>
-      {loading ? (
-        <p className="text-xs text-ink-300">Loading…</p>
-      ) : error ? (
-        <p className="text-xs text-loss">{error}</p>
-      ) : !trades || trades.length === 0 ? (
-        <p className="text-xs text-ink-300">No trades on your broker account today.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] border-collapse">
-            <thead>
-              <tr className="border-b border-ink-600/30">
-                <th className="px-3 py-2 text-left text-2xs uppercase tracking-wide text-ink-300">Time</th>
-                <th className="px-3 py-2 text-left text-2xs uppercase tracking-wide text-ink-300">Symbol</th>
-                <th className="px-3 py-2 text-center text-2xs uppercase tracking-wide text-ink-300">Side</th>
-                <th className="px-3 py-2 text-right text-2xs uppercase tracking-wide text-ink-300">Qty</th>
-                <th className="px-3 py-2 text-right text-2xs uppercase tracking-wide text-ink-300">Price</th>
-              </tr>
-            </thead>
-            <tbody>
-              {trades.map((t) => (
-                <tr key={t.tradeId} className="border-b border-ink-600/20 last:border-b-0">
-                  <td className="px-3 py-2 text-xs text-ink-300 whitespace-nowrap">{t.tradeTime}</td>
-                  <td className="px-3 py-2 text-xs font-mono text-ink-50">{t.tradingSymbol}</td>
-                  <td className="px-3 py-2 text-center">
-                    <span className={cn(
-                      'text-2xs font-bold px-1.5 py-0.5 rounded border',
-                      t.transactionType === 'BUY'
-                        ? 'text-gain bg-gain-subtle border-gain-border'
-                        : 'text-loss bg-loss-subtle border-loss-border',
-                    )}>
-                      {t.transactionType}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-xs text-ink-100 tabular-nums">{t.quantity}</td>
-                  <td className="px-3 py-2 text-right font-mono text-xs text-ink-100 tabular-nums">₹{formatIndianNumber(t.price)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Card>
   );
 }
 
@@ -389,11 +298,6 @@ export default function TradeHistory() {
             <Trash2 size={12} /> Clear all
           </button>
         )}
-      </motion.div>
-
-      {/* Live broker trade book — real data from Angel One, same on every device */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.05 }}>
-        <LiveBrokerTradesCard />
       </motion.div>
 
       {/* Summary strip */}
