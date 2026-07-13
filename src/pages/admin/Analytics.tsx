@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { BarChart3, TrendingUp, DollarSign, Users2 } from 'lucide-react';
 import {
-  Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { Card } from '@components/ui';
 import { AdminPageHeader } from '@components/admin/AdminPageHeader';
-import { AdminComingSoon } from '@components/admin/AdminComingSoon';
 import { adminService } from '@services/admin.service';
+import { formatIndianNumber } from '@utils/format';
+import type { TradeStats } from '@/types';
 
 interface SignupTooltipPayload {
   active?: boolean;
@@ -24,19 +25,113 @@ function SignupTooltip({ active, payload }: SignupTooltipPayload) {
   );
 }
 
+function PnlDistributionCard({ stats, loading, error }: { stats: TradeStats | null; loading: boolean; error: string | null }) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <TrendingUp size={15} className="text-brand-300" />
+        <h3 className="font-display text-sm font-semibold text-ink-50">P&amp;L Distribution</h3>
+      </div>
+      {loading ? (
+        <p className="text-xs text-ink-300 py-8 text-center">Loading…</p>
+      ) : error ? (
+        <p className="text-xs text-loss py-8 text-center">{error}</p>
+      ) : !stats || stats.pnlDistribution.every((b) => b.count === 0) ? (
+        <p className="text-xs text-ink-300 py-8 text-center">No live trades yet.</p>
+      ) : (
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={stats.pnlDistribution} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+            <CartesianGrid stroke="#232B47" strokeDasharray="3 3" vertical={false} opacity={0.5} />
+            <XAxis dataKey="bucket" tick={{ fontSize: 9, fill: '#8B92A8' }} tickLine={false} axisLine={false} angle={-20} textAnchor="end" height={50} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#8B92A8' }} tickLine={false} axisLine={false} width={30} />
+            <Tooltip
+              contentStyle={{ background: '#171E33', border: '1px solid #232B47', borderRadius: 8, fontSize: 12 }}
+              labelStyle={{ color: '#8B92A8' }}
+            />
+            <Bar dataKey="count" fill="#FFB627" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      )}
+    </Card>
+  );
+}
+
+function MostActiveUsersCard({ stats, loading, error }: { stats: TradeStats | null; loading: boolean; error: string | null }) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Users2 size={15} className="text-brand-300" />
+        <h3 className="font-display text-sm font-semibold text-ink-50">Most Active Users</h3>
+      </div>
+      {loading ? (
+        <p className="text-xs text-ink-300 py-8 text-center">Loading…</p>
+      ) : error ? (
+        <p className="text-xs text-loss py-8 text-center">{error}</p>
+      ) : !stats || stats.mostActiveUsers.length === 0 ? (
+        <p className="text-xs text-ink-300 py-8 text-center">No live trades yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {stats.mostActiveUsers.map((u, i) => (
+            <div key={u.userId} className="flex items-center justify-between text-sm">
+              <span className="text-ink-200 truncate">{i + 1}. {u.userName}</span>
+              <span className="font-mono text-ink-50 tabular-nums shrink-0 ml-2">{u.tradeCount} trade{u.tradeCount !== 1 ? 's' : ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function MostTradedSymbolsCard({ stats, loading, error }: { stats: TradeStats | null; loading: boolean; error: string | null }) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <DollarSign size={15} className="text-brand-300" />
+        <h3 className="font-display text-sm font-semibold text-ink-50">Most Traded Symbols</h3>
+      </div>
+      {loading ? (
+        <p className="text-xs text-ink-300 py-8 text-center">Loading…</p>
+      ) : error ? (
+        <p className="text-xs text-loss py-8 text-center">{error}</p>
+      ) : !stats || stats.mostTradedSymbols.length === 0 ? (
+        <p className="text-xs text-ink-300 py-8 text-center">No live trades yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {stats.mostTradedSymbols.map((s, i) => (
+            <div key={`${s.strike}-${s.side}`} className="flex items-center justify-between text-sm">
+              <span className="text-ink-200">
+                {i + 1}. {formatIndianNumber(s.strike, 0)} <span className={s.side === 'CE' ? 'text-loss' : 'text-gain'}>{s.side}</span>
+              </span>
+              <span className="font-mono text-ink-50 tabular-nums shrink-0 ml-2">{s.count} trade{s.count !== 1 ? 's' : ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function AdminAnalytics() {
   const [series, setSeries] = useState<Array<{ date: string; count: number }>>([]);
   const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState<TradeStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState<string | null>(null);
 
   useEffect(() => {
     adminService.getSignupsPerDay(30)
       .then((data) => { setSeries(data); setError(null); })
       .catch((err) => setError(err.message ?? 'Failed to load signup data'));
+    adminService.getTradeStats()
+      .then((data) => { setStats(data); setStatsError(null); })
+      .catch((err) => setStatsError(err.message ?? 'Failed to load trade stats'))
+      .finally(() => setStatsLoading(false));
   }, []);
 
   return (
     <div className="space-y-5 max-w-[1400px] mx-auto">
-      <AdminPageHeader icon={BarChart3} title="Analytics" subtitle="New Users Per Day is real; the rest needs Phase 2 trade data" />
+      <AdminPageHeader icon={BarChart3} title="Analytics" subtitle="Signups and real (live, non-paper) trade activity across every user" />
 
       <Card className="p-5">
         <h3 className="font-display text-sm font-semibold text-ink-50 mb-4">New Users Per Day (last 30 days)</h3>
@@ -87,9 +182,9 @@ export default function AdminAnalytics() {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <AdminComingSoon icon={TrendingUp} title="P&L Distribution" reason="Needs Phase 2's trades table." />
-        <AdminComingSoon icon={Users2} title="Most Active Users" reason="Needs Phase 2's trades table." />
-        <AdminComingSoon icon={DollarSign} title="Most Traded Symbols" reason="Needs Phase 2's trades table." />
+        <PnlDistributionCard stats={stats} loading={statsLoading} error={statsError} />
+        <MostActiveUsersCard stats={stats} loading={statsLoading} error={statsError} />
+        <MostTradedSymbolsCard stats={stats} loading={statsLoading} error={statsError} />
       </div>
     </div>
   );

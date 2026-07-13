@@ -38,6 +38,32 @@ export interface AdminLogEntry {
   createdAt: number;
 }
 
+export interface AdminTradeEntry {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  strike: number;
+  side: 'CE' | 'PE';
+  expiry: string;
+  entryPrice: number;
+  exitPrice: number;
+  quantity: number;
+  investment: number;
+  pnlAmount: number;
+  pnlPercent: number;
+  exitKind: string;
+  isPaper: boolean;
+  entryTime: number;
+  exitTime: number;
+}
+
+export interface TradeStats {
+  pnlDistribution: Array<{ bucket: string; count: number }>;
+  mostActiveUsers: Array<{ userId: string; userName: string; tradeCount: number }>;
+  mostTradedSymbols: Array<{ strike: number; side: 'CE' | 'PE'; count: number }>;
+}
+
 export type AdminNotificationType = 'system' | 'maintenance' | 'market-alert' | 'popup';
 
 export interface AdminNotificationEntry {

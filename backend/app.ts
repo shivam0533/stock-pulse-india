@@ -11,6 +11,7 @@ import { settingsRoutes } from './routes/settings.routes';
 import { userNotificationsRoutes } from './routes/notifications.routes';
 import { subscriptionRoutes } from './subscriptions/subscription.routes';
 import { adminSubscriptionRoutes } from './subscriptions/admin/adminSubscription.routes';
+import { tradesRoutes } from './trades/trades.routes';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.middleware';
 
 // Wide-open cors() sent `Access-Control-Allow-Origin: *` to literally any
@@ -78,6 +79,9 @@ export function createApp(): Express {
   app.use('/api/settings', settingsRoutes);
   // Any logged-in user's own admin-sent notifications (not admin-only).
   app.use('/api/notifications', userNotificationsRoutes);
+  // Phase 2 — persists a completed trade (paper or live) the instant it
+  // closes, so it survives independently of any one browser's local storage.
+  app.use('/api/trades', tradesRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

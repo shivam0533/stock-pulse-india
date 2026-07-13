@@ -26,6 +26,9 @@ router.get('/logs/login', asyncHandler(adminController.listLoginLogs));
 router.get('/logs/admin-actions', asyncHandler(adminController.listAdminLogs));
 
 router.get('/analytics/signups', asyncHandler(adminController.getSignupsPerDay));
+router.get('/analytics/trades-stats', asyncHandler(adminController.getTradeStats));
+
+router.get('/trades', asyncHandler(adminController.listTrades));
 
 router.post('/notifications', asyncHandler(adminController.createNotification));
 router.get('/notifications', asyncHandler(adminController.listNotifications));

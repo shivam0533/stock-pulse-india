@@ -5,6 +5,7 @@ import { paperBrokerAdapter } from '@services/broker/paperBrokerAdapter';
 import { useOptionChainRiskStore } from '@store/optionChainRisk.store';
 import { usePublicSettingsStore } from '@store/publicSettings.store';
 import { useOptionChainToastStore } from '@store/optionChainToast.store';
+import { tradesService } from '@services/trades.service';
 import { getPaperLotSize } from '@config/lotSize.config';
 import { isDevTestingModeEnabled } from '@config/devTestingMode';
 import type {
@@ -132,6 +133,20 @@ function makeCompleted(
   };
 }
 
+/**
+ * Fire-and-forget: persists a completed trade to the backend (Phase 2's
+ * trades table) so it survives independently of this browser's local
+ * storage and becomes visible to the Admin Panel and this same user from a
+ * different device. Never awaited by any caller — a trade that already
+ * closed locally must never be blocked or rolled back by this failing.
+ */
+function persistTrade(completed: CompletedOptionTrade, isPaper: boolean): void {
+  tradesService.recordTrade(completed, isPaper).catch(() => {
+    // Best-effort only — the local Zustand-persisted history (this device's
+    // own record) remains correct either way.
+  });
+}
+
 // Re-entrancy guard for performExit — a real broker SELL call can take
 // longer than the ~2s live-quote poll interval, and updateLTP fires on
 // every poll; without this, a persistent SL breach would fire a duplicate
@@ -185,11 +200,13 @@ export const useOptionTradeStore = create<OptionTradeState>()(
 
         if (isPaper) {
           const exitTime = Date.now();
+          const completed = makeCompleted(trade, exitPrice, exitKind, exitTime, exitTrigger);
           useOptionChainToastStore.getState().push(toastKind, `${label} — ${tradeLabel(trade)}`);
           logTransition('initiateExit (paper)', { id: trade.id, exitKind, finalStatus, exitPrice });
+          persistTrade(completed, true);
           set({
             activeTrade: { ...trade, currentLTP: exitPrice, status: finalStatus, exitTime, exitTrigger },
-            history: [makeCompleted(trade, exitPrice, exitKind, exitTime, exitTrigger), ...get().history],
+            history: [completed, ...get().history],
           });
           return;
         }
@@ -230,15 +247,17 @@ export const useOptionTradeStore = create<OptionTradeState>()(
 
           const exitTime = Date.now();
           const exitPrice = result.filledPrice > 0 ? result.filledPrice : intendedExitPrice;
+          const completed = makeCompleted({ ...current, currentLTP: exitPrice }, exitPrice, exitKind, exitTime, exitTrigger);
           useOptionChainToastStore.getState().push(
             toastKind, `${label} — ${tradeLabel(current)} (real order ${result.brokerOrderId})`,
           );
           logTransition('performExit (live, success)', {
             id: trade.id, exitKind, finalStatus, exitPrice, brokerOrderId: result.brokerOrderId,
           });
+          persistTrade(completed, false);
           set({
             activeTrade: { ...current, currentLTP: exitPrice, status: finalStatus, exitTime, exitTrigger, exitPending: false },
-            history: [makeCompleted({ ...current, currentLTP: exitPrice }, exitPrice, exitKind, exitTime, exitTrigger), ...get().history],
+            history: [completed, ...get().history],
           });
         } catch (err) {
           const message = (err as Error).message;
@@ -254,14 +273,16 @@ export const useOptionTradeStore = create<OptionTradeState>()(
             const alreadyClosedOnBroker = message.toLowerCase().includes('nothing to exit');
             if (alreadyClosedOnBroker) {
               const exitTime = Date.now();
+              const completed = makeCompleted({ ...current, currentLTP: intendedExitPrice }, intendedExitPrice, exitKind, exitTime, exitTrigger);
               useOptionChainToastStore.getState().push(
                 toastKind,
                 `${tradeLabel(current)} was already closed on your broker (not through this app) — reconciled locally at the last known price.`,
               );
               logTransition('performExit (live, already closed on broker)', { id: trade.id, exitKind, message });
+              persistTrade(completed, false);
               set({
                 activeTrade: { ...current, currentLTP: intendedExitPrice, status: finalStatus, exitTime, exitTrigger, exitPending: false },
-                history: [makeCompleted({ ...current, currentLTP: intendedExitPrice }, intendedExitPrice, exitKind, exitTime, exitTrigger), ...get().history],
+                history: [completed, ...get().history],
               });
               return;
             }

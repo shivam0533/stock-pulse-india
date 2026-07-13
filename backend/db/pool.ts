@@ -201,3 +201,51 @@ export async function ensureSubscriptionTables(): Promise<void> {
   // eslint-disable-next-line no-console
   console.log('[DB] subscription tables ready');
 }
+
+/**
+ * Called once at startup — Phase 2's trades table. Every completed trade
+ * (paper or live, Option Chain manual or Auto Trading) is written here from
+ * the frontend the moment it closes (see backend/trades/), so it survives
+ * independently of any one browser's local storage and the Admin Panel's
+ * Trades/Analytics pages (previously "Coming Soon" placeholders — no
+ * server-side record existed at all) can read real data.
+ */
+export async function ensureTradesTable(): Promise<void> {
+  if (!connectionString) return;
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS trades (
+      id UUID PRIMARY KEY,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      broker_order_id TEXT,
+      strike NUMERIC NOT NULL,
+      side TEXT NOT NULL,
+      expiry TEXT NOT NULL,
+      entry_price NUMERIC NOT NULL,
+      exit_price NUMERIC NOT NULL,
+      order_type TEXT NOT NULL,
+      product_type TEXT NOT NULL,
+      lot_size INTEGER NOT NULL,
+      lots INTEGER NOT NULL,
+      quantity INTEGER NOT NULL,
+      investment NUMERIC NOT NULL,
+      pnl_amount NUMERIC NOT NULL,
+      pnl_percent NUMERIC NOT NULL,
+      exit_reason TEXT,
+      exit_kind TEXT NOT NULL,
+      strategy_name TEXT,
+      is_paper BOOLEAN NOT NULL DEFAULT false,
+      entry_time TIMESTAMPTZ NOT NULL,
+      exit_time TIMESTAMPTZ NOT NULL,
+      stop_loss NUMERIC,
+      target NUMERIC,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_trades_user_id ON trades (user_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_trades_exit_time ON trades (exit_time DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_trades_is_paper ON trades (is_paper);`);
+
+  // eslint-disable-next-line no-console
+  console.log('[DB] trades table ready');
+}

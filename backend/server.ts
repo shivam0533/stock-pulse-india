@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { createApp } from './app';
-import { ensureUsersTable, ensureAdminTables, ensureSubscriptionTables } from './db/pool';
+import { ensureUsersTable, ensureAdminTables, ensureSubscriptionTables, ensureTradesTable } from './db/pool';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
 
@@ -26,6 +26,7 @@ async function start(): Promise<void> {
   await ensureUsersTable();
   await ensureAdminTables();
   await ensureSubscriptionTables();
+  await ensureTradesTable();
   app.listen(PORT, () => {
     // eslint-disable-next-line no-console
     console.log(`Broker integration backend listening on port ${PORT}`);

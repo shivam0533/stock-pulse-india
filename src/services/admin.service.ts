@@ -3,6 +3,7 @@ import { ENDPOINTS } from '@api/endpoints';
 import type {
   AdminUserSummary, AdminDashboardStats, LoginLogEntry, AdminLogEntry,
   AdminNotificationEntry, AdminNotificationType, AdminSettings, UserRole,
+  AdminTradeEntry, TradeStats,
 } from '@/types';
 
 /** Server-side-paginated result shape every /api/admin/* list endpoint returns. */
@@ -70,6 +71,16 @@ export const adminService = {
 
   async listNotifications(page = 1, pageSize = 20): Promise<AdminPage<AdminNotificationEntry>> {
     const { data } = await apiClient.get<AdminPage<AdminNotificationEntry>>(ENDPOINTS.admin.notifications, { params: { page, pageSize } });
+    return data;
+  },
+
+  async listTrades(opts: { page?: number; pageSize?: number; isPaper?: boolean } = {}): Promise<AdminPage<AdminTradeEntry>> {
+    const { data } = await apiClient.get<AdminPage<AdminTradeEntry>>(ENDPOINTS.admin.trades, { params: opts });
+    return data;
+  },
+
+  async getTradeStats(): Promise<TradeStats> {
+    const { data } = await apiClient.get<TradeStats>(ENDPOINTS.admin.tradeStats);
     return data;
   },
 

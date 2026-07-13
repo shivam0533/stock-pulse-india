@@ -4,6 +4,7 @@ import { AdminApiError } from './admin.errors';
 import { getPublicSettings, setSetting, APP_SETTING_KEYS } from '../services/appSettings.service';
 import type {
   AdminUserSummary, AdminDashboardStats, LoginLogEntry, AdminLogEntry, AdminNotificationEntry, NotificationType,
+  AdminTradeEntry, TradeStats,
 } from './admin.types';
 
 export interface Paginated<T> {
@@ -264,6 +265,98 @@ class AdminService {
       [days],
     );
     return result.rows.map((r) => ({ date: r.date, count: Number(r.count) }));
+  }
+
+  /**
+   * Phase 2 — reads the trades table every completed trade is written to
+   * the instant it closes (see backend/trades/). `isPaper` lets the Admin
+   * Panel filter demo/practice trades out of what's meant to represent
+   * real platform activity.
+   */
+  async listTrades(opts: { page: number; pageSize: number; isPaper?: boolean }): Promise<Paginated<AdminTradeEntry>> {
+    const page = Math.max(1, opts.page);
+    const pageSize = Math.min(100, Math.max(1, opts.pageSize));
+    const whereClause = opts.isPaper !== undefined ? 'WHERE t.is_paper = $1' : '';
+    const params: unknown[] = opts.isPaper !== undefined ? [opts.isPaper] : [];
+
+    const countResult = await pool.query<{ count: string }>(
+      `SELECT COUNT(*) FROM trades t ${whereClause}`,
+      params,
+    );
+
+    const dataParams = [...params, pageSize, (page - 1) * pageSize];
+    const result = await pool.query<{
+      id: string; user_id: string; user_name: string; user_email: string;
+      strike: string; side: 'CE' | 'PE'; expiry: string; entry_price: string; exit_price: string;
+      quantity: number; investment: string; pnl_amount: string; pnl_percent: string;
+      exit_kind: string; is_paper: boolean; entry_time: string; exit_time: string;
+    }>(
+      `SELECT t.id, t.user_id, u.name AS user_name, u.email AS user_email,
+              t.strike, t.side, t.expiry, t.entry_price, t.exit_price, t.quantity,
+              t.investment, t.pnl_amount, t.pnl_percent, t.exit_kind, t.is_paper,
+              t.entry_time, t.exit_time
+       FROM trades t JOIN users u ON u.id = t.user_id
+       ${whereClause}
+       ORDER BY t.exit_time DESC
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      dataParams,
+    );
+
+    return {
+      total: Number(countResult.rows[0].count),
+      page,
+      pageSize,
+      items: result.rows.map((r) => ({
+        id: r.id, userId: r.user_id, userName: r.user_name, userEmail: r.user_email,
+        strike: Number(r.strike), side: r.side, expiry: r.expiry,
+        entryPrice: Number(r.entry_price), exitPrice: Number(r.exit_price), quantity: r.quantity,
+        investment: Number(r.investment), pnlAmount: Number(r.pnl_amount), pnlPercent: Number(r.pnl_percent),
+        exitKind: r.exit_kind, isPaper: r.is_paper,
+        entryTime: new Date(r.entry_time).getTime(), exitTime: new Date(r.exit_time).getTime(),
+      })),
+    };
+  }
+
+  /** Real-money trades only (is_paper = false) — paper/practice activity would misrepresent actual platform performance. */
+  async getTradeStats(): Promise<TradeStats> {
+    const [distribution, activeUsers, symbols] = await Promise.all([
+      pool.query<{ bucket: string; count: string }>(`
+        SELECT bucket, COUNT(*)::text AS count FROM (
+          SELECT CASE
+            WHEN pnl_amount < -1000 THEN '0:< -₹1,000'
+            WHEN pnl_amount < -500  THEN '1:-₹1,000 to -₹500'
+            WHEN pnl_amount < 0     THEN '2:-₹500 to ₹0'
+            WHEN pnl_amount < 500   THEN '3:₹0 to ₹500'
+            WHEN pnl_amount < 1000  THEN '4:₹500 to ₹1,000'
+            ELSE                         '5:> ₹1,000'
+          END AS bucket
+          FROM trades WHERE is_paper = false
+        ) sub
+        GROUP BY bucket ORDER BY bucket
+      `),
+      pool.query<{ user_id: string; user_name: string; trade_count: string }>(`
+        SELECT t.user_id, u.name AS user_name, COUNT(*)::text AS trade_count
+        FROM trades t JOIN users u ON u.id = t.user_id
+        WHERE t.is_paper = false
+        GROUP BY t.user_id, u.name
+        ORDER BY COUNT(*) DESC
+        LIMIT 5
+      `),
+      pool.query<{ strike: string; side: 'CE' | 'PE'; count: string }>(`
+        SELECT strike, side, COUNT(*)::text AS count
+        FROM trades WHERE is_paper = false
+        GROUP BY strike, side
+        ORDER BY COUNT(*) DESC
+        LIMIT 5
+      `),
+    ]);
+
+    return {
+      // Strips the leading "N:" sort key added only to make GROUP BY order deterministic.
+      pnlDistribution: distribution.rows.map((r) => ({ bucket: r.bucket.slice(2), count: Number(r.count) })),
+      mostActiveUsers: activeUsers.rows.map((r) => ({ userId: r.user_id, userName: r.user_name, tradeCount: Number(r.trade_count) })),
+      mostTradedSymbols: symbols.rows.map((r) => ({ strike: Number(r.strike), side: r.side, count: Number(r.count) })),
+    };
   }
 
   async getSettings() {

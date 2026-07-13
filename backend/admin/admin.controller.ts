@@ -174,6 +174,27 @@ export const adminController = {
     }
   },
 
+  async listTrades(req: Request, res: Response): Promise<void> {
+    try {
+      const { page, pageSize } = pagination(req);
+      const isPaperRaw = req.query.isPaper;
+      const isPaper = isPaperRaw === 'true' ? true : isPaperRaw === 'false' ? false : undefined;
+      const result = await adminService.listTrades({ page, pageSize, isPaper });
+      sendSuccess(res, result);
+    } catch (err) {
+      handleError(res, err);
+    }
+  },
+
+  async getTradeStats(_req: Request, res: Response): Promise<void> {
+    try {
+      const stats = await adminService.getTradeStats();
+      sendSuccess(res, stats);
+    } catch (err) {
+      handleError(res, err);
+    }
+  },
+
   async getSettings(_req: Request, res: Response): Promise<void> {
     try {
       const settings = await adminService.getSettings();

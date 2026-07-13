@@ -42,8 +42,13 @@ export const ENDPOINTS = {
     loginLogs: '/admin/logs/login',
     adminLogs: '/admin/logs/admin-actions',
     signupsPerDay: '/admin/analytics/signups',
+    tradeStats: '/admin/analytics/trades-stats',
+    trades: '/admin/trades',
     notifications: '/admin/notifications',
     settings: '/admin/settings',
+  },
+  trades: {
+    record: '/trades',
   },
   subscription: {
     status: '/subscription/status',
